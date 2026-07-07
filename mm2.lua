@@ -47,7 +47,7 @@ local S = {
     Orbit = false, OrbitSpeed = 20, OrbitDist = 6, OrbitHeight = 0,
     Bang = false, BangSpeed = 3, Jerk = false,
     InvisibleFE = false, FreeCam = false,
-    CoinESP = false, AutoCoins = false, FastAutofarm = false, FastAutofarmSpeed = 60,
+    CoinESP = false, AutoCoins = false, FastAutofarm = false, FastAutofarmSpeed = 20, AfterFarm = "Auto (Role)",
     FollowPlayer = false, FollowPlayerDistance = 4, FollowPlayerMode = "Follow", FollowPlayerSpeed = 60, FollowPlayerOrbitSpeed = 20,
     CustomTime = false, TimeOfDay = 14, Gravity = 196, MoonGravity = false, DisableBlur = false,
     FakeLag = false, FakeLagLimit = 15,
@@ -2844,7 +2844,10 @@ local function doFakeOut()
         local oldpos = root.CFrame
         local OrgDestroyHeight = workspace.FallenPartsDestroyHeight
         workspace.FallenPartsDestroyHeight = -1e9
-        root.CFrame = CFrame.new(Vector3.new(0, OrgDestroyHeight - 25, 0))
+        -- Drop WAY below the fall-destroy line (was only -25, too shallow to shake off flingers).
+        -- We're safe because FallenPartsDestroyHeight is -1e9 while we're down here; the leftover
+        -- flinger parts get nuked when it's restored to OrgDestroyHeight below.
+        root.CFrame = CFrame.new(Vector3.new(0, OrgDestroyHeight - 10000, 0))
         task.wait(1)
         root = getRoot(LP.Character)
         if root then root.CFrame = oldpos end
@@ -3066,7 +3069,7 @@ do
     mkAction(secM, "Fake Out (Flinger Kill)", function() doFakeOut() end, 5)
     local secTr = mkSection(PFun, "Troll", 3)
     mkToggle(secTr, "Spinbot", false, function(v) S.Spinbot = v end, 1)
-    mkSlider(secTr, "Spin Speed", 5, 100, 20, function(v) S.SpinSpeed = v end, 2)
+    mkSlider(secTr, "Spin Speed", 5, 1000, 20, function(v) S.SpinSpeed = v end, 2)
     mkToggle(secTr, "Jerk", false, function(v) S.Jerk = v; if v then startJerk() else stopJerk() end end, 3)
     local secC = mkSection(PFun, "Camera & Body", 4)
     mkToggle(secC, "Free Cam", false, function(v) S.FreeCam = v; if v then startFreecam() else stopFreecam() end end, 1)
@@ -4118,13 +4121,17 @@ do
 end
 
 -- ============ AUTOFARM TAB (coins + fast autofarm) ============
+isRoundActive = function()
+    if next(RoleCache) ~= nil then return true end
+    if workspace:FindFirstChild("CoinContainer", true) then return true end
+    return workspace:FindFirstChild("Normal") ~= nil
+end
+
 do
+    -- Find every coin part. A part is a coin if ITS name OR its parent MODEL's name contains "coin"
+    -- (this game's coins are Model "Coin_Server" > "CoinVisual" > MeshParts). Scan the map first,
+    -- fall back to the whole workspace if the map folder isn't named "Normal" this version.
     local function eachCoin(fn)
-        -- A coin part matches if ITS name OR its parent MODEL's name contains "coin". MM2 coins are
-        -- often a Model named "Coin" holding a differently-named MeshPart, so the old check (BasePart
-        -- name only) found nothing → that was the "Coin ESP doesn't work" bug. We scan the "Normal"
-        -- map folder first, and fall back to the whole workspace if the coins live elsewhere / the
-        -- map folder isn't named "Normal" in this version.
         local found = false
         local function scan(root)
             if not root then return end
@@ -4143,150 +4150,131 @@ do
         if not found then scan(workspace) end
     end
 
-    local function getCoinStats()
-        local mainRound = LP:FindFirstChild("PlayerGui") and LP.PlayerGui:FindFirstChild("MainRound")
-        if mainRound then
-            local coinBag = mainRound:FindFirstChild("CoinBag", true)
-            if coinBag then
-                local label = coinBag:FindFirstChildOfClass("TextLabel") or (coinBag:IsA("TextLabel") and coinBag)
-                if label then
-                    local txt = label.Text
-                    local cur, maxVal = string.match(txt, "(%d+)%s*/%s*(%d+)")
-                    if cur and maxVal then
-                        return tonumber(cur), tonumber(maxVal)
-                    end
-                    local singleVal = string.match(txt, "(%d+)")
-                    if singleVal then
-                        return tonumber(singleVal), 40
-                    end
-                end
-            end
-        end
-        return nil, nil
-    end
-
-    isRoundActive = function()
-        -- Round is active when roles have been dealt (RoleCache is filled by the GetPlayerData poll
-        -- and cleared at round end) OR the classic map folder is loaded. Relying ONLY on
-        -- "workspace.Normal" silently killed everything gated by this (autofarm, auto-evade, coin ESP,
-        -- knife dodge) on any map/mode where that folder isn't named "Normal".
-        if next(RoleCache) ~= nil then return true end
-        return workspace:FindFirstChild("Normal") ~= nil
-    end
-
-    local secCoins = mkSection(PAutofarm, "Coins", 1)
-    mkToggle(secCoins, "Coin ESP", false, function(v) S.CoinESP = v end, 1)
-
-    local secAuto = mkSection(PAutofarm, "Automated", 2)
-    mkToggle(secAuto, "Fast Autofarm", false, function(v) S.FastAutofarm = v end, 1)
-    -- Glide speed in studs/s. ~60-120 is safe; past ~150 the position validator starts
-    -- lagging you back on some servers (the glide auto-recovers, but it wastes time).
-    mkSlider(secAuto, "Autofarm Speed", 20, 200, 60, function(v) S.FastAutofarmSpeed = v end, 2)
-    mkToggle(secAuto, "Auto Evade Murderer", false, function(v) S.AutoEvade = v end, 3)
-    mkSlider(secAuto, "Evade Distance", 10, 50, 25, function(v) S.AutoEvadeRange = v end, 4)
-
-    -- Glide to the target with PER-FRAME steps (speed*dt studs) instead of the old 30-stud
-    -- jumps with zeroed velocity. The server then sees continuous motion whose replicated
-    -- velocity matches the movement, which passes MM2's "invalid position" (teleport
-    -- distance) check instead of tripping the lagback.
-    -- If the server DOES roll us back (position suddenly far from where we put it), we
-    -- re-path from wherever it dropped us and crawl at low speed for a moment before
-    -- resuming full speed, so one rejection doesn't turn into an endless fight.
-    -- Returns true when the target was reached.
+    -- Fly STRAIGHT THROUGH WALLS to a point: noclip every step + set the CFrame directly. Returns
+    -- true only if we actually arrived (used to tell "collected" from "bag full won't collect").
     local function moveTo(targetCF, speed, checkFn)
-        local spd = math.max(speed or S.FastAutofarmSpeed or 60, 10)
-        local c = LP.Character
-        local hrp = c and c:FindFirstChild("HumanoidRootPart")
-        if not hrp then return false end
-        local expected = hrp.Position
-        local slowUntil = 0
-        local deadline = tick() + 15
+        local spd = math.max(speed or S.FastAutofarmSpeed or 20, 1)
+        local deadline = tick() + 12
         while tick() < deadline do
             if not S.FastAutofarm then return false end
             if checkFn and not checkFn() then return false end
-            c = LP.Character
-            hrp = c and c:FindFirstChild("HumanoidRootPart")
+            local c = LP.Character
+            local hrp = c and c:FindFirstChild("HumanoidRootPart")
             local hum = c and c:FindFirstChildOfClass("Humanoid")
             if not hrp or not hum or hum.Health <= 0 then return false end
-
-            -- Lagback detection: the server moved us away from where we last put ourselves.
-            if (hrp.Position - expected).Magnitude > 20 then
-                slowUntil = tick() + 1.2
-                expected = hrp.Position
-            end
-
-            local dt = math.min(task.wait(), 1 / 30) -- clamp lag spikes so one frame never TPs far
-            local curSpd = (tick() < slowUntil) and math.min(spd, 25) or spd
-            local delta = targetCF.Position - hrp.Position
-            local dist = delta.Magnitude
-
-            -- Noclip so walls/props never wedge us into a "stuck fighting geometry" state.
-            for _, pt in pairs(c:GetDescendants()) do
+            -- Noclip so walls never block the path.
+            for _, pt in ipairs(c:GetDescendants()) do
                 if pt:IsA("BasePart") then pt.CanCollide = false end
             end
-
-            local step = curSpd * dt
+            local dt = math.min(task.wait(), 1 / 30)
+            c = LP.Character
+            hrp = c and c:FindFirstChild("HumanoidRootPart")
+            if not hrp then return false end
+            local delta = targetCF.Position - hrp.Position
+            local dist = delta.Magnitude
+            local step = spd * dt
             if dist <= math.max(2.5, step) then
                 hrp.CFrame = CFrame.new(targetCF.Position)
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 hrp.AssemblyAngularVelocity = Vector3.zero
                 return true
             end
-
             local dir = delta / dist
             local newPos = hrp.Position + dir * step
-            -- Face along the horizontal travel direction (guard the straight-up case where a
-            -- horizontal lookAt would degenerate).
-            local flat = Vector3.new(dir.X, 0, dir.Z)
-            if flat.Magnitude > 0.05 then
-                hrp.CFrame = CFrame.new(newPos, newPos + flat)
-            else
-                hrp.CFrame = CFrame.new(newPos)
-            end
-            -- Replicated velocity matches the motion -- a mover with zero velocity is exactly
-            -- what the position validator flags.
-            hrp.AssemblyLinearVelocity = dir * curSpd
+            -- Match the velocity to the glide. This keeps the server seeing consistent motion (no
+            -- rubber-band -> passes THROUGH walls) AND overrides gravity so we don't fall into the
+            -- void when there's no floor under us. Never zero it (rubber-band) or leave it (gravity).
+            hrp.AssemblyLinearVelocity = dir * spd
             hrp.AssemblyAngularVelocity = Vector3.zero
-            expected = newPos
+            local flat = Vector3.new(dir.X, 0, dir.Z)
+            hrp.CFrame = (flat.Magnitude > 0.05) and CFrame.new(newPos, newPos + flat) or CFrame.new(newPos)
         end
         return false
     end
 
-    -- Coin ESP (per-coin Highlight so each coin is marked independently).
+    -- ---------- UI ----------
+    local secCoins = mkSection(PAutofarm, "Coins", 1)
+    mkToggle(secCoins, "Coin ESP", false, function(v) S.CoinESP = v end, 1)
+
+    local secAuto = mkSection(PAutofarm, "Automated", 2)
+    mkToggle(secAuto, "Fast Autofarm", false, function(v) S.FastAutofarm = v end, 1)
+    -- Studs/s (1-40). Lower = safer / less likely the position validator lags you back through walls.
+    mkSlider(secAuto, "Autofarm Speed", 1, 40, 20, function(v) S.FastAutofarmSpeed = v end, 2)
+
+    -- ---------- Coin ESP (one BillboardGui dot per coin; ~75 coins blow past the ~31 Highlight cap) ----------
+    local function coinHost(part)
+        local p = part
+        while p and p.Parent and p.Parent ~= workspace do
+            if string.find(string.lower(p.Parent.Name), "coincontainer") then return p end
+            p = p.Parent
+        end
+        return part.Parent or part
+    end
     local espWasOn = false
+    local espHosts = {}
     task.spawn(function()
         while S.Gui and S.Gui.Parent do
             if S.CoinESP then
                 espWasOn = true
                 pcall(function()
+                    local live = {}
                     eachCoin(function(coin)
-                        if not coin:FindFirstChild("MM2_CoinESP") then
-                            local h = Instance.new("Highlight")
-                            h.Name = "MM2_CoinESP"
-                            h.Adornee = coin
-                            h.FillColor = Color3.fromRGB(255, 215, 0)
-                            h.FillTransparency = 0.35
-                            h.OutlineColor = Color3.fromRGB(255, 240, 150)
-                            h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                            h.Parent = coin
+                        if coin.Transparency < 1 then
+                            local host = coinHost(coin)
+                            if host and not live[host] then live[host] = coin end
                         end
                     end)
+                    for host in pairs(espHosts) do
+                        if not live[host] or not host.Parent then
+                            local m = host and host:FindFirstChild("MM2_CoinESP")
+                            if m then m:Destroy() end
+                            espHosts[host] = nil
+                        end
+                    end
+                    for host, coin in pairs(live) do
+                        if not host:FindFirstChild("MM2_CoinESP") then
+                            local bb = Instance.new("BillboardGui")
+                            bb.Name = "MM2_CoinESP"
+                            bb.Adornee = coin
+                            bb.Size = UDim2.fromOffset(14, 14)
+                            bb.AlwaysOnTop = true
+                            bb.LightInfluence = 0
+                            bb.Parent = host
+                            local dot = Instance.new("Frame")
+                            dot.Size = UDim2.fromScale(1, 1)
+                            dot.BackgroundColor3 = Color3.fromRGB(255, 210, 0)
+                            dot.BorderSizePixel = 0
+                            dot.Parent = bb
+                            local uc = Instance.new("UICorner")
+                            uc.CornerRadius = UDim.new(1, 0)
+                            uc.Parent = dot
+                            local us = Instance.new("UIStroke")
+                            us.Color = Color3.fromRGB(70, 50, 0)
+                            us.Thickness = 1
+                            us.Parent = dot
+                            espHosts[host] = true
+                        end
+                    end
                 end)
             elseif espWasOn then
                 espWasOn = false
                 pcall(function()
-                    eachCoin(function(coin)
-                        local e = coin:FindFirstChild("MM2_CoinESP"); if e then e:Destroy() end
-                    end)
+                    for host in pairs(espHosts) do
+                        if host and host.Parent then
+                            local m = host:FindFirstChild("MM2_CoinESP")
+                            if m then m:Destroy() end
+                        end
+                    end
+                    espHosts = {}
                 end)
             end
-            task.wait(0.5)
+            task.wait(0.4)
         end
     end)
 
-
-    -- Fast Autofarm logic loop
+    -- ---------- Fast Autofarm: ONLY collect coins (fly through walls to each). Nothing else. ----------
     task.spawn(function()
+        local skip = {}          -- coins that refused to collect (bag full / stuck) -> stop chasing
         while S.Gui and S.Gui.Parent do
             if S.FastAutofarm then
                 pcall(function()
@@ -4294,195 +4282,64 @@ do
                     local hrp = c and c:FindFirstChild("HumanoidRootPart")
                     local hum = c and c:FindFirstChildOfClass("Humanoid")
                     if hrp and hum and hum.Health > 0 and isRoundActive() then
-                        local curCoins, maxCoins = getCoinStats()
-                        curCoins = curCoins or 0
-                        maxCoins = maxCoins or 40
-                        if curCoins < 50 and curCoins < maxCoins then
-                            local coins = {}
-                            eachCoin(function(coin)
-                                if coin.Transparency < 1 then
-                                    table.insert(coins, coin)
-                                end
+                        local myPos = hrp.Position
+                        local coins = {}
+                        eachCoin(function(coin)
+                            if coin.Transparency < 1 and not skip[coin] then table.insert(coins, coin) end
+                        end)
+                        if #coins > 0 then
+                            -- collect the nearest coin (flying through walls to reach it).
+                            hrp.Anchored = false
+                            table.sort(coins, function(a, b)
+                                return (a.Position - myPos).Magnitude < (b.Position - myPos).Magnitude
                             end)
-                            if #coins > 0 then
-                                table.sort(coins, function(a, b)
-                                    return (a.Position - hrp.Position).Magnitude < (b.Position - hrp.Position).Magnitude
-                                end)
-                                local targetCoin = coins[1]
-
-                                -- Vacuum: fire the touch on EVERY coin within reach, so coins we
-                                -- merely fly past get collected too (the server accepts pickups a
-                                -- few studs out). Runs every frame of the glide via checkFn.
-                                local function vacuum()
-                                    if not firetouchinterest then return end
-                                    local h = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-                                    if not h then return end
-                                    for _, cn in ipairs(coins) do
-                                        if cn.Parent and cn.Transparency < 1 and (h.Position - cn.Position).Magnitude < 11 then
-                                            pcall(firetouchinterest, h, cn, 0)
-                                            pcall(firetouchinterest, h, cn, 1)
-                                        end
+                            local targetCoin = coins[1]
+                            local function vacuum()
+                                if not firetouchinterest then return end
+                                local h = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+                                if not h then return end
+                                for _, cn in ipairs(coins) do
+                                    if cn.Parent and cn.Transparency < 1 and (h.Position - cn.Position).Magnitude < 11 then
+                                        pcall(firetouchinterest, h, cn, 0)
+                                        pcall(firetouchinterest, h, cn, 1)
                                     end
                                 end
-
-                                -- Glide to the target coin, hoovering everything on the way.
-                                moveTo(targetCoin.CFrame, S.FastAutofarmSpeed or 60, function()
-                                    vacuum()
-                                    return targetCoin and targetCoin.Parent and targetCoin.Transparency < 1 and c and c.Parent and hum and hum.Health > 0
-                                end)
+                            end
+                            local reached = moveTo(targetCoin.CFrame, S.FastAutofarmSpeed or 20, function()
                                 vacuum()
-
-                                task.wait(0.05)
-                            else
-                                task.wait(0.2)
+                                return targetCoin and targetCoin.Parent and targetCoin.Transparency < 1 and c and c.Parent and hum and hum.Health > 0
+                            end)
+                            vacuum()
+                            -- Arrived ON it but it stayed -> can't collect (bag full / stuck) -> skip it.
+                            if reached and targetCoin.Parent and targetCoin.Transparency < 1 then
+                                skip[targetCoin] = true
                             end
+                            task.wait(0.05)
                         else
-                            -- 50 coins reached or bag full, now execute role
-                            local myRole = getRole(LP)
-                            if myRole == "Murderer" then
-                                local knife = LP.Backpack:FindFirstChild("Knife") or c:FindFirstChild("Knife")
-                                if knife then
-                                    if knife.Parent == LP.Backpack then
-                                        hum:EquipTool(knife)
-                                        task.wait(0.2)
-                                    end
-                                    killAll()
-                                end
-                                task.wait(1.5)
-                            elseif myRole == "Sheriff" or myRole == "Hero" then
-                                local gun = LP.Backpack:FindFirstChild("Gun") or c:FindFirstChild("Gun") or LP.Backpack:FindFirstChild("Revolver") or c:FindFirstChild("Revolver")
-                                if gun then
-                                    if gun.Parent == LP.Backpack then
-                                        hum:EquipTool(gun)
-                                        task.wait(0.2)
-                                    end
-                                    killMurder()
-                                end
-                                task.wait(1.5)
-                            else
-                                -- Innocent: stay safe high up
-                                local safeCF = CFrame.new(hrp.Position.X, 500, hrp.Position.Z)
-                                moveTo(safeCF, S.FastAutofarmSpeed or 60)
-                                
-                                if not S.VoidPlatform or not S.VoidPlatform.Parent then
-                                    local p = Instance.new("Part")
-                                    p.Size = Vector3.new(10, 1, 10)
-                                    p.Anchored = true
-                                    p.CanCollide = true
-                                    p.Transparency = 0.5
-                                    p.Color = Color3.fromRGB(0, 255, 0)
-                                    p.Position = hrp.Position - Vector3.new(0, 3, 0)
-                                    p.Parent = workspace
-                                    S.VoidPlatform = p
-                                else
-                                    S.VoidPlatform.Position = hrp.Position - Vector3.new(0, 3, 0)
-                                end
-                                task.wait(0.5)
-                            end
+                            -- Nothing left to collect -> hover in place (anchored so noclip doesn't
+                            -- drop us through the floor) and wait. Autofarm does nothing but collect.
+                            hrp.Anchored = true
+                            task.wait(0.3)
                         end
                     else
-                        if S.VoidPlatform then
-                            pcall(function() S.VoidPlatform:Destroy() end)
-                            S.VoidPlatform = nil
-                        end
+                        skip = {}
+                        local ch = LP.Character
+                        local h = ch and ch:FindFirstChild("HumanoidRootPart")
+                        if h and h.Anchored then h.Anchored = false end
                         task.wait(1)
                     end
                 end)
             else
-                if S.VoidPlatform then
-                    pcall(function() S.VoidPlatform:Destroy() end)
-                    S.VoidPlatform = nil
-                end
+                skip = {}
+                local ch = LP.Character
+                local h = ch and ch:FindFirstChild("HumanoidRootPart")
+                if h and h.Anchored then h.Anchored = false end
             end
             task.wait(0.05)
         end
     end)
-
-    -- Auto Evade Murderer loop
-    local originalCFrame = nil
-    local evading = false
-    local evadePlatform = nil
-    task.spawn(function()
-        while S.Gui and S.Gui.Parent do
-            if S.AutoEvade and isRoundActive() then
-                pcall(function()
-                    local c = LP.Character
-                    local hrp = c and c:FindFirstChild("HumanoidRootPart")
-                    local hum = c and c:FindFirstChildOfClass("Humanoid")
-                    local myRole = getRole(LP)
-                    
-                    if hrp and hum and hum.Health > 0 and myRole ~= "Murderer" then
-                        local mHrp = nil
-                        for _, p in ipairs(Players:GetPlayers()) do
-                            if p ~= LP and p.Character and getRole(p) == "Murderer" then
-                                local mh = p.Character:FindFirstChildOfClass("Humanoid")
-                                local mhPart = p.Character:FindFirstChild("HumanoidRootPart")
-                                if mh and mh.Health > 0 and mhPart then
-                                    mHrp = mhPart
-                                    break
-                                end
-                            end
-                        end
-                        
-                        if mHrp then
-                            local checkDist = (mHrp.Position - (evading and originalCFrame and originalCFrame.Position or hrp.Position)).Magnitude
-                            if not evading and checkDist < (S.AutoEvadeRange or 25) then
-                                evading = true
-                                originalCFrame = hrp.CFrame
-                                
-                                local targetCF = hrp.CFrame + Vector3.new(0, 250, 0)
-                                hrp.CFrame = targetCF
-                                
-                                if not evadePlatform or not evadePlatform.Parent then
-                                    local p = Instance.new("Part")
-                                    p.Size = Vector3.new(12, 1, 12)
-                                    p.Anchored = true
-                                    p.CanCollide = true
-                                    p.Transparency = 0.5
-                                    p.Color = Color3.fromRGB(255, 0, 0)
-                                    p.Position = targetCF.Position - Vector3.new(0, 3, 0)
-                                    p.Parent = workspace
-                                    evadePlatform = p
-                                else
-                                    evadePlatform.Position = targetCF.Position - Vector3.new(0, 3, 0)
-                                end
-                                Notify("Auto Evade", "Murderer too close! Evaded to ceiling.", 3)
-                            elseif evading then
-                                local origMDist = (mHrp.Position - originalCFrame.Position).Magnitude
-                                if origMDist > (S.AutoEvadeRange or 25) + 12 then
-                                    evading = false
-                                    hrp.CFrame = originalCFrame
-                                    originalCFrame = nil
-                                    if evadePlatform then
-                                        pcall(function() evadePlatform:Destroy() end)
-                                        evadePlatform = nil
-                                    end
-                                    Notify("Auto Evade", "Safe to return.", 3)
-                                end
-                            end
-                        elseif evading then
-                            evading = false
-                            hrp.CFrame = originalCFrame
-                            originalCFrame = nil
-                            if evadePlatform then
-                                pcall(function() evadePlatform:Destroy() end)
-                                evadePlatform = nil
-                            end
-                        end
-                    end
-                end)
-            elseif evading then
-                evading = false
-                originalCFrame = nil
-                if evadePlatform then
-                    pcall(function() evadePlatform:Destroy() end)
-                    evadePlatform = nil
-                end
-            end
-            task.wait(0.1)
-        end
-    end)
 end
+
 -- ============ CONFIG SYSTEM (persist settings + HUD across launches) ============
 -- Wrapped in a do-block to keep its locals out of the main chunk's 200-local budget.
 do
