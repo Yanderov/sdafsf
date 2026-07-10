@@ -8,24 +8,26 @@ local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local SoundService = game:GetService("SoundService")
 local LP = Players.LocalPlayer
+-- The game's real max camera zoom, captured BEFORE anything (incl. config auto-load) changes it.
+-- "No Camera Limit" restores THIS when off, so executing the script never widens your zoom-out.
+local _origMaxZoom = LP.CameraMaxZoomDistance
 local S = {
     Connections = {}, Gui = nil, OriginalTransparencies = {},
     VoidPlatform = nil, LastGrab = 0,
     CustomWalkSpeed = 16, CustomJumpPower = 50,
     MurderChams = false, SheriffChams = false, HeroChams = false,
-    InnocentChams = false, GunChams = false, GunNotify = false, KnifeChams = false,
-    WallDetectChams = false,
+    InnocentChams = false, GunChams = false, GunNotify = false,
     AutoGrabGun = false, XrayOn = false, CamClip = false, NoCamLimit = false,
     AntiFling = false, AntiVoid = false, NoClip = false, AntiRagdoll = false,
     Fly = false, FlySpeed = 50, TouchFling = false,
     KnifeAura = false, KnifeAuraRange = 15,
-    KillMurder = false, PiercingBullet = false, ActiveShader = "None", rtxLowToggle = false, rtxMedToggle = false, rtxHighToggle = false, nightToggle = false, pinkToggle = false,
+    KillMurder = false, ActiveShader = "None", rtxLowToggle = false, rtxMedToggle = false, rtxHighToggle = false, nightToggle = false, pinkToggle = false,
     HUD_Roles = false, HUD_Keybinds = false, HUD_GunStatus = false, HUD_FPS = false,
     HUD_Ping = false, HUD_Coords = false, HUD_Time = false, HUD_Players = false,
     NameESP = false, DistanceESP = false, RoleESP = false, HealthESP = false,
     BoxESP = false, BoxFillESP = false, HealthBarESP = false, TracerESP = false, ESPMaxDist = 1000,
-    ChamsAll = false, HeadDot = false, TracerOrigin = "Bottom",
-    ChamsOpacity = 50, ChamsVisibleCheck = false,
+    HeadDot = false, TracerOrigin = "Bottom",
+    ChamsOpacity = 50, GunHeldChams = false,
     FullBright = false, NoFog = false, ForceDay = false, ForceNight = false, NoShadows = false, Brightness = 2,
     Saturation = 0, Contrast = 0, CamFOV = 70,
     SkyEnabled = false, SkyPreset = "Day", SkyTint = "Preset", SkyRainbow = false,
@@ -35,8 +37,7 @@ local S = {
     Crosshair = false,
     FOVEnabled = false, ShowFOV = false, RainbowFOV = false,
     FOVThickness = 2, FOVColor = "White", FOVRadius = 360,
-    HitboxExpand = false, HitboxTarget = "Murderer", HitboxSize = 10,
-    HUD_Watermark = false, HUD_Speed = false, HUD_Session = false,
+    HUD_Watermark = false, HUD_Speed = false, HUD_Session = false, HUD_KillFeed = false,
     AutoRespawn = false, WalkOnWater = false, AutoSprint = false, AntiLag = false,
     InfiniteJump = false, Spinbot = false, SpinSpeed = 20, AntiAFK = false, Freeze = false,
     Bhop = false, BhopMax = 28, SpeedGlitch = false, AirSpeed = 50,
@@ -46,17 +47,20 @@ local S = {
     Swim = false, WallTP = false, HeadSit = false,
     Orbit = false, OrbitSpeed = 20, OrbitDist = 6, OrbitHeight = 0,
     Bang = false, BangSpeed = 3, Jerk = false,
-    InvisibleFE = false, FreeCam = false,
+    InvisibleFE = false, FreeCam = false, Blink = false, ClickFling = false,
     CoinESP = false, AutoCoins = false, FastAutofarm = false, FastAutofarmSpeed = 20, AfterFarm = "Auto (Role)",
     FollowPlayer = false, FollowPlayerDistance = 4, FollowPlayerMode = "Follow", FollowPlayerSpeed = 60, FollowPlayerOrbitSpeed = 20,
     CustomTime = false, TimeOfDay = 14, Gravity = 196, MoonGravity = false, DisableBlur = false,
     FakeLag = false, FakeLagLimit = 15,
-    AutoShootMurder = false, TriggerBot = false, BlinkDist = 20,
-    CrosshairShape = "Cross", CrosshairColor = "Cyan", CrosshairSize = 12, CrosshairThickness = 2, CrosshairGap = 4, CrosshairRotation = 0, HideRealCursor = false,
-    AutoEvade = false, AutoEvadeRange = 25, KillFeed = false, AutoGG = false, CustomGGText = "GG!", UseCustomGG = false,
+    TriggerBot = false,
+    CrosshairShape = "Cross", CrosshairColor = "Cyan", CrosshairSize = 12, CrosshairThickness = 2, CrosshairGap = 4, CrosshairRotation = 0,
+    AutoEvade = false, AutoEvadeRange = 25, AutoGG = false, CustomGGText = "GG!", UseCustomGG = false,
     AutoDodgeKnife = false, AutoDodgeMode = "Teleport", AutoDodgeSpeed = 16,
-    AimLock = false, AimLockTarget = "Nearest", SilentAim = false,
-    AimLockHoldRMB = true, AimSmooth = 1, AimPrediction = 0,
+    AimLock = false, AimLockTarget = "Nearest",
+    AimLockHoldRMB = true, AimSmooth = 1, AimPrediction = 0, AimPart = "Head",
+    MuteGun = false, MuteCoin = false, MuteKill = false, MuteKillNotify = false, HideKillFX = false,
+    Whitelist = {},   -- [playerName]=true : right-click in Targets; skipped by fling / kill / aura / aim
+    ManualTargets = {},  -- [playerName]=true : left-click multi-select in Targets (Fun / Follow). empty = Auto
 }
 _G.MM2_Visuals_Script = S
 local createHighlight, getRole, rebuildCrosshair, moveTo, isRoundActive
@@ -67,7 +71,7 @@ local VelocityHistory = {}
 function S:Destroy()
     pcall(function()
         LP.DevCameraOcclusionMode = Enum.DevCameraOcclusionMode.Zoom
-        LP.CameraMaxZoomDistance = 128
+        LP.CameraMaxZoomDistance = _origMaxZoom
     end)
     pcall(function()
         local c = LP.Character
@@ -89,6 +93,9 @@ function S:Destroy()
     if self.Gui then pcall(function() self.Gui:Destroy() end) end
 end
 local function tc(conn) table.insert(S.Connections, conn); return conn end
+-- Whitelisted players are SKIPPED by offensive/targeting features (Fling, Kill All, Knife Aura, Aim
+-- Lock). Toggled per-player by right-clicking their row in the Targets tab.
+local function isWhitelisted(p) return p ~= nil and S.Whitelist and S.Whitelist[p.Name] == true end
 local SndCache = {}
 local function snd(id, pitch, vol)
     task.spawn(function() pcall(function()
@@ -130,6 +137,288 @@ local T = {
     Accent    = Color3.fromRGB(255, 255, 255),
     Glow      = Color3.fromRGB(255, 255, 255),
 }
+local Themes = {
+    Monochrome = {
+        BG = Color3.fromRGB(5, 5, 5),
+        Sidebar = Color3.fromRGB(3, 3, 3),
+        Card = Color3.fromRGB(10, 10, 10),
+        Elev = Color3.fromRGB(18, 18, 18),
+        Hover = Color3.fromRGB(24, 24, 24),
+        ActiveBg = Color3.fromRGB(30, 30, 30),
+        Bd = Color3.fromRGB(28, 28, 28),
+        Bd2 = Color3.fromRGB(42, 42, 42),
+        TgOn = Color3.fromRGB(255, 255, 255),
+        Accent = Color3.fromRGB(255, 255, 255),
+        Glow = Color3.fromRGB(100, 100, 100),
+    },
+    ["Neon Blue"] = {
+        BG = Color3.fromRGB(5, 6, 10),
+        Sidebar = Color3.fromRGB(3, 4, 6),
+        Card = Color3.fromRGB(8, 10, 16),
+        Elev = Color3.fromRGB(12, 16, 26),
+        Hover = Color3.fromRGB(18, 24, 38),
+        ActiveBg = Color3.fromRGB(22, 30, 48),
+        Bd = Color3.fromRGB(20, 30, 50),
+        Bd2 = Color3.fromRGB(30, 45, 75),
+        TgOn = Color3.fromRGB(0, 180, 255),
+        Accent = Color3.fromRGB(0, 180, 255),
+        Glow = Color3.fromRGB(0, 100, 200),
+    },
+    ["Ruby Red"] = {
+        BG = Color3.fromRGB(8, 4, 4),
+        Sidebar = Color3.fromRGB(5, 3, 3),
+        Card = Color3.fromRGB(14, 8, 8),
+        Elev = Color3.fromRGB(22, 12, 12),
+        Hover = Color3.fromRGB(32, 18, 18),
+        ActiveBg = Color3.fromRGB(42, 24, 24),
+        Bd = Color3.fromRGB(40, 18, 18),
+        Bd2 = Color3.fromRGB(60, 26, 26),
+        TgOn = Color3.fromRGB(255, 60, 60),
+        Accent = Color3.fromRGB(255, 60, 60),
+        Glow = Color3.fromRGB(200, 40, 40),
+    },
+    ["Emerald Green"] = {
+        BG = Color3.fromRGB(4, 8, 5),
+        Sidebar = Color3.fromRGB(3, 5, 3),
+        Card = Color3.fromRGB(8, 14, 10),
+        Elev = Color3.fromRGB(12, 22, 16),
+        Hover = Color3.fromRGB(18, 32, 24),
+        ActiveBg = Color3.fromRGB(24, 42, 32),
+        Bd = Color3.fromRGB(18, 40, 24),
+        Bd2 = Color3.fromRGB(26, 60, 36),
+        TgOn = Color3.fromRGB(40, 220, 100),
+        Accent = Color3.fromRGB(40, 220, 100),
+        Glow = Color3.fromRGB(30, 180, 80),
+    },
+    ["Amethyst Purple"] = {
+        BG = Color3.fromRGB(7, 5, 10),
+        Sidebar = Color3.fromRGB(4, 3, 6),
+        Card = Color3.fromRGB(12, 8, 16),
+        Elev = Color3.fromRGB(18, 12, 26),
+        Hover = Color3.fromRGB(26, 18, 38),
+        ActiveBg = Color3.fromRGB(34, 24, 48),
+        Bd = Color3.fromRGB(30, 20, 45),
+        Bd2 = Color3.fromRGB(45, 30, 70),
+        TgOn = Color3.fromRGB(160, 80, 255),
+        Accent = Color3.fromRGB(160, 80, 255),
+        Glow = Color3.fromRGB(120, 50, 200),
+    },
+    ["Sakura Pink"] = {
+        BG = Color3.fromRGB(8, 6, 8),
+        Sidebar = Color3.fromRGB(5, 4, 5),
+        Card = Color3.fromRGB(16, 12, 16),
+        Elev = Color3.fromRGB(26, 18, 26),
+        Hover = Color3.fromRGB(38, 26, 38),
+        ActiveBg = Color3.fromRGB(48, 32, 48),
+        Bd = Color3.fromRGB(45, 30, 45),
+        Bd2 = Color3.fromRGB(70, 45, 70),
+        TgOn = Color3.fromRGB(255, 120, 200),
+        Accent = Color3.fromRGB(255, 120, 200),
+        Glow = Color3.fromRGB(220, 90, 160),
+    },
+    ["Amber Gold"] = {
+        BG = Color3.fromRGB(8, 6, 4),
+        Sidebar = Color3.fromRGB(5, 4, 3),
+        Card = Color3.fromRGB(16, 12, 8),
+        Elev = Color3.fromRGB(26, 20, 12),
+        Hover = Color3.fromRGB(38, 28, 18),
+        ActiveBg = Color3.fromRGB(48, 36, 24),
+        Bd = Color3.fromRGB(45, 35, 20),
+        Bd2 = Color3.fromRGB(70, 55, 30),
+        TgOn = Color3.fromRGB(255, 180, 0),
+        Accent = Color3.fromRGB(255, 180, 0),
+        Glow = Color3.fromRGB(200, 140, 0),
+    },
+    ["Midnight Navy"] = {
+        BG = Color3.fromRGB(3, 5, 10),
+        Sidebar = Color3.fromRGB(2, 3, 6),
+        Card = Color3.fromRGB(6, 10, 20),
+        Elev = Color3.fromRGB(10, 16, 32),
+        Hover = Color3.fromRGB(14, 24, 48),
+        ActiveBg = Color3.fromRGB(18, 32, 64),
+        Bd = Color3.fromRGB(15, 25, 55),
+        Bd2 = Color3.fromRGB(25, 40, 85),
+        TgOn = Color3.fromRGB(40, 120, 255),
+        Accent = Color3.fromRGB(40, 120, 255),
+        Glow = Color3.fromRGB(30, 90, 200),
+    },
+    ["Toxic Lime"] = {
+        BG = Color3.fromRGB(5, 8, 4),
+        Sidebar = Color3.fromRGB(3, 5, 3),
+        Card = Color3.fromRGB(10, 16, 8),
+        Elev = Color3.fromRGB(16, 26, 12),
+        Hover = Color3.fromRGB(24, 38, 18),
+        ActiveBg = Color3.fromRGB(32, 48, 24),
+        Bd = Color3.fromRGB(25, 45, 20),
+        Bd2 = Color3.fromRGB(40, 70, 30),
+        TgOn = Color3.fromRGB(120, 255, 0),
+        Accent = Color3.fromRGB(120, 255, 0),
+        Glow = Color3.fromRGB(90, 200, 0),
+    },
+    ["Sunset Orange"] = {
+        BG = Color3.fromRGB(8, 5, 4),
+        Sidebar = Color3.fromRGB(5, 3, 3),
+        Card = Color3.fromRGB(16, 10, 8),
+        Elev = Color3.fromRGB(26, 16, 12),
+        Hover = Color3.fromRGB(38, 24, 18),
+        ActiveBg = Color3.fromRGB(48, 30, 24),
+        Bd = Color3.fromRGB(45, 25, 20),
+        Bd2 = Color3.fromRGB(70, 40, 30),
+        TgOn = Color3.fromRGB(255, 90, 0),
+        Accent = Color3.fromRGB(255, 90, 0),
+        Glow = Color3.fromRGB(200, 70, 0),
+    }
+}
+local Translations = {
+    RU = {
+        Visuals = "Визуалы", Combat = "Бой", Motion = "Движение", Misc = "Разное", Fun = "Веселье",
+        Targets = "Цели", Teleport = "Телепорт", HUD = "ХУД", Shaders = "Шейдеры", World = "Мир",
+        Autofarm = "Автофарм", Servers = "Сервера", Config = "Конфиг", Settings = "Настройки",
+        ["Text Size"] = "Размер текста", Language = "Язык", Theme = "Тема", Close = "Закрыть",
+        ["Theme Style"] = "Цветовая тема",
+    },
+    UK = {
+        Visuals = "Візуали", Combat = "Бій", Motion = "Рух", Misc = "Різне", Fun = "Розваги",
+        Targets = "Цілі", Teleport = "Телепорт", HUD = "ХУД", Shaders = "Шейдери", World = "Світ",
+        Autofarm = "Автофарм", Servers = "Сервери", Config = "Конфіг", Settings = "Налаштування",
+        ["Text Size"] = "Розмір тексту", Language = "Мова", Theme = "Тема", Close = "Закрити",
+        ["Theme Style"] = "Колірна тема",
+    },
+    SPANISH = {
+        Visuals = "Visuales", Combat = "Combate", Motion = "Movimiento", Misc = "Varios", Fun = "Diversión",
+        Targets = "Objetivos", Teleport = "Teletransporte", HUD = "HUD", Shaders = "Shaders", World = "Mundo",
+        Autofarm = "Autofarm", Servers = "Servidores", Config = "Config", Settings = "Ajustes",
+        ["Text Size"] = "Tamaño de texto", Language = "Idioma", Theme = "Tema", Close = "Cerrar",
+        ["Theme Style"] = "Tema de color",
+    },
+    ENG = {}
+}
+local function lang(str)
+    local l = S.Language or "ENG"
+    local t = Translations[l]
+    return t and t[str] or str
+end
+local function updateLanguage()
+    for _, item in ipairs(SBItems) do
+        pcall(function() item.label.Text = lang(item.name) end)
+    end
+end
+local function updateTextSizes()
+    local scale = S.TextSizeScale or 1
+    for _, obj in ipairs(SG:GetDescendants()) do
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+            pcall(function()
+                if not obj:GetAttribute("OrigTextSize") then
+                    obj:SetAttribute("OrigTextSize", obj.TextSize)
+                end
+                local orig = obj:GetAttribute("OrigTextSize")
+                obj.TextSize = math.clamp(math.round(orig * scale), 8, 24)
+            end)
+        end
+    end
+end
+local function applyTheme(themeName)
+    local theme = Themes[themeName]
+    if not theme then return end
+    S.SelectedTheme = themeName
+    for k, v in pairs(theme) do
+        T[k] = v
+    end
+    local function recolor(obj)
+        for attr, role in pairs(obj:GetAttributes()) do
+            if attr:sub(1, 15) == "ThemeColorRole_" then
+                local prop = attr:sub(16)
+                pcall(function()
+                    obj[prop] = T[role]
+                end)
+            end
+        end
+        if obj.Name == "Main" then
+            obj.BackgroundColor3 = T.BG; pcall(function() obj:SetAttribute("ThemeColorRole_BackgroundColor3", "BG") end)
+        elseif obj.Name == "Sidebar" or obj.Name == "Status" or obj.Name == "ProfileHeader" then
+            obj.BackgroundColor3 = T.Sidebar; pcall(function() obj:SetAttribute("ThemeColorRole_BackgroundColor3", "Sidebar") end)
+        elseif obj.Name == "InertiaSettings" then
+            obj.BackgroundColor3 = T.Card; pcall(function() obj:SetAttribute("ThemeColorRole_BackgroundColor3", "Card") end)
+        elseif obj.Name == "track" or obj.Name == "SliderTrack" then
+            obj.BackgroundColor3 = T.TgOff; pcall(function() obj:SetAttribute("ThemeColorRole_BackgroundColor3", "TgOff") end)
+        elseif obj.Name == "fill" or obj.Name == "SliderFill" then
+            obj.BackgroundColor3 = T.Accent; pcall(function() obj:SetAttribute("ThemeColorRole_BackgroundColor3", "Accent") end)
+        elseif obj.Name == "knob" then
+            obj.BackgroundColor3 = obj:GetAttribute("Active") and T.KnobOn or T.KnobOff
+        elseif obj.Name == "StatusBarLine" or obj.Name == "SBLine" or obj.Name == "Line" or obj.Name == "phLine" then
+            obj.BackgroundColor3 = T.Bd; pcall(function() obj:SetAttribute("ThemeColorRole_BackgroundColor3", "Bd") end)
+        elseif obj:IsA("TextButton") then
+            if obj.Name == "track" then
+                obj.BackgroundColor3 = obj:GetAttribute("Active") and T.TgOn or T.TgOff
+            elseif obj.Parent and obj.Parent.Name == "TBar" then
+                obj.BackgroundColor3 = T.Elev; pcall(function() obj:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
+            elseif obj.Parent and obj.Parent.Name == "Sidebar" then
+                local on = (obj.Name == activePage.Name)
+                obj.BackgroundColor3 = T.Elev; pcall(function() obj:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
+            end
+        elseif obj:IsA("UIStroke") then
+            if obj.Parent and obj.Parent.Name == "Main" then
+                obj.Color = T.Bd; pcall(function() obj:SetAttribute("ThemeColorRole_Color", "Bd") end)
+            else
+                obj.Color = T.Bd2; pcall(function() obj:SetAttribute("ThemeColorRole_Color", "Bd2") end)
+            end
+        elseif obj:IsA("UIGradient") then
+            if obj.Parent and (obj.Parent.Name == "fill" or obj.Parent.Name == "lbf") then
+                obj.Color = ColorSequence.new(T.Accent, T.Glow)
+            end
+        elseif obj.Name:sub(1, 4) == "HUD_" then
+            obj.BackgroundColor3 = T.Card; pcall(function() obj:SetAttribute("ThemeColorRole_BackgroundColor3", "Card") end)
+            local stroke = obj:FindFirstChildOfClass("UIStroke")
+            if stroke then stroke.Color = T.Bd2; pcall(function() stroke:SetAttribute("ThemeColorRole_Color", "Bd2") end) end
+            for _, child in ipairs(obj:GetChildren()) do
+                if child:IsA("Frame") and child.Size.Y.Offset == 26 then
+                    child.BackgroundColor3 = T.Elev; pcall(function() child:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
+                    local line = child:FindFirstChildOfClass("Frame")
+                    if line then line.BackgroundColor3 = T.Bd; pcall(function() line:SetAttribute("ThemeColorRole_BackgroundColor3", "Bd") end) end
+                    local tick = child:FindFirstChild("tick") or child:FindFirstChildOfClass("Frame")
+                    if tick and tick.Size.X.Offset == 2 then
+                        tick.BackgroundColor3 = T.Accent; pcall(function() tick:SetAttribute("ThemeColorRole_BackgroundColor3", "Accent") end)
+                    end
+                end
+            end
+        elseif obj.Name == "MobileHUD" then
+            obj.BackgroundColor3 = T.Card; pcall(function() obj:SetAttribute("ThemeColorRole_BackgroundColor3", "Card") end)
+            local stroke = obj:FindFirstChildOfClass("UIStroke")
+            if stroke then stroke.Color = T.Bd2; pcall(function() stroke:SetAttribute("ThemeColorRole_Color", "Bd2") end) end
+        elseif obj.Parent and obj.Parent.Name == "MobileHUD" and obj:IsA("TextButton") then
+            local active = obj:GetAttribute("Active")
+            obj.BackgroundColor3 = active and T.Accent or T.Elev
+            obj.TextColor3 = active and T.KnobOn or T.White
+            local stroke = obj:FindFirstChildOfClass("UIStroke")
+            if stroke then stroke.Color = T.Bd; pcall(function() stroke:SetAttribute("ThemeColorRole_Color", "Bd") end) end
+        end
+    end
+    for _, obj in ipairs(SG:GetDescendants()) do
+        pcall(recolor, obj)
+    end
+end
+
+-- Synchronously pre-load settings before creating any UI or loading screen
+pcall(function()
+    if readfile and isfile and isfile("MM2_Configs/_autoload.json") then
+        local data = game:GetService("HttpService"):JSONDecode(readfile("MM2_Configs/_autoload.json"))
+        if data then
+            if data.SelectedTheme and Themes[data.SelectedTheme] then
+                S.SelectedTheme = data.SelectedTheme
+                for k, v in pairs(Themes[data.SelectedTheme]) do
+                    T[k] = v
+                end
+            end
+            if data.Language then
+                S.Language = data.Language
+            end
+            if data.TextSizeScale then
+                S.TextSizeScale = data.TextSizeScale
+            end
+        end
+    end
+end)
+
 local RoleShade = {
     Murderer = Color3.fromRGB(255, 0, 0),
     Sheriff  = Color3.fromRGB(0, 100, 255),
@@ -172,7 +461,7 @@ local function Pad(i, t, b, l, r)
 end
 local function Shadow(i, transparency)
     local s = Instance.new("UIStroke")
-    s.Color = T.Bd2
+    s.Color = T.Bd2; pcall(function() s:SetAttribute("ThemeColorRole_Color", "Bd2") end)
     s.Thickness = 2
     s.Transparency = transparency or 0.6
     s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
@@ -191,7 +480,7 @@ local function mkIcon(parent, kind)
         f.BorderSizePixel = 0
         f.Position = UDim2.fromOffset(px, py)
         f.Size = UDim2.fromOffset(sx, sy)
-        f.BackgroundColor3 = T.Tx2
+        f.BackgroundColor3 = T.Tx2; pcall(function() f:SetAttribute("ThemeColorRole_BackgroundColor3", "Tx2") end)
         if round then Corner(f, round) end
         table.insert(paints, {f, "bg"})
         return f
@@ -269,7 +558,8 @@ local function mkIcon(parent, kind)
     return api
 end
 local SG = Instance.new("ScreenGui")
-SG.Name = "MM2"
+SG.Name = "Inertia"
+SG.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 SG.ResetOnSpawn = false
 SG.DisplayOrder = 1000
 SG.IgnoreGuiInset = true
@@ -319,7 +609,7 @@ local function Notify(title, msg, dur)
     sc.Parent = toast
     local strip = Instance.new("Frame")
     strip.Parent = toast
-    strip.BackgroundColor3 = T.White
+    strip.BackgroundColor3 = T.White; pcall(function() strip:SetAttribute("ThemeColorRole_BackgroundColor3", "White") end)
     strip.BorderSizePixel = 0
     strip.Position = UDim2.new(0, 0, 0, 0)
     strip.Size = UDim2.new(1, 0, 0, 1)
@@ -331,7 +621,7 @@ local function Notify(title, msg, dur)
     tt.Position = UDim2.new(0, 14, 0, 8)
     tt.Size = UDim2.new(1, -28, 0, 16)
     tt.Text = tostring(title or "")
-    tt.TextColor3 = T.White
+    tt.TextColor3 = T.White; pcall(function() tt:SetAttribute("ThemeColorRole_TextColor3", "White") end)
     tt.TextSize = 13
     tt.TextTransparency = 1
     tt.TextTruncate = Enum.TextTruncate.AtEnd
@@ -344,7 +634,7 @@ local function Notify(title, msg, dur)
     bt.Position = UDim2.new(0, 14, 0, 24)
     bt.Size = UDim2.new(1, -28, 0, 16)
     bt.Text = tostring(msg or "")
-    bt.TextColor3 = T.Tx2
+    bt.TextColor3 = T.Tx2; pcall(function() bt:SetAttribute("ThemeColorRole_TextColor3", "Tx2") end)
     bt.TextSize = 12
     bt.TextTransparency = 1
     bt.TextTruncate = Enum.TextTruncate.AtEnd
@@ -409,13 +699,13 @@ local FOV_COLORS = {
     Black  = Color3.fromRGB(15, 15, 15),
 }
 
-local WW, WH = 640, 460
+local WW, WH = 520, 290
 local expandedSize = UDim2.fromOffset(WW, WH)
 local Main = Instance.new("Frame")
 Main.Name = "Main"
 Main.Parent = SG
 Main.Active = true
-Main.BackgroundColor3 = T.BG
+Main.BackgroundColor3 = T.BG; pcall(function() Main:SetAttribute("ThemeColorRole_BackgroundColor3", "BG") end)
 Main.BorderSizePixel = 0
 Main.Position = UDim2.new(0.5, -WW/2, 0.5, -WH/2)
 Main.Size = expandedSize
@@ -427,7 +717,7 @@ local AccLine = Instance.new("Frame")
 AccLine.Parent = Main
 AccLine.Size = UDim2.new(1, 0, 0, 1)
 AccLine.Position = UDim2.new(0, 0, 0, 0)
-AccLine.BackgroundColor3 = T.White
+AccLine.BackgroundColor3 = T.White; pcall(function() AccLine:SetAttribute("ThemeColorRole_BackgroundColor3", "White") end)
 AccLine.BorderSizePixel = 0
 AccLine.ZIndex = 10
 AccLine.BackgroundTransparency = 0.15
@@ -460,7 +750,7 @@ TBar.Size = UDim2.new(1, 0, 0, 40)
 TBar.Position = UDim2.new(0, 0, 0, 1)
 local TIcon = Instance.new("Frame")
 TIcon.Parent = TBar
-TIcon.BackgroundColor3 = T.White
+TIcon.BackgroundColor3 = T.White; pcall(function() TIcon:SetAttribute("ThemeColorRole_BackgroundColor3", "White") end)
 TIcon.BorderSizePixel = 0
 TIcon.Position = UDim2.new(0, 16, 0.5, -5)
 TIcon.Size = UDim2.new(0, 2, 0, 10)
@@ -471,8 +761,8 @@ TTitle.BackgroundTransparency = 1
 TTitle.Position = UDim2.new(0, 26, 0, 0)
 TTitle.Size = UDim2.new(0, 80, 1, 0)
 TTitle.Font = FB
-TTitle.Text = "MM2"
-TTitle.TextColor3 = T.White
+TTitle.Text = "Inertia"
+TTitle.TextColor3 = T.White; pcall(function() TTitle:SetAttribute("ThemeColorRole_TextColor3", "White") end)
 TTitle.TextSize = 16
 TTitle.TextXAlignment = Enum.TextXAlignment.Left
 local function mkWinBtn(txt, xOff)
@@ -481,22 +771,22 @@ local function mkWinBtn(txt, xOff)
     b.AnchorPoint = Vector2.new(1, 0.5)
     b.Position = UDim2.new(1, xOff, 0.5, 0)
     b.Size = UDim2.new(0, 26, 0, 22)
-    b.BackgroundColor3 = T.Elev
+    b.BackgroundColor3 = T.Elev; pcall(function() b:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
     b.BorderSizePixel = 0
     b.Font = FB
     b.TextSize = 13
     b.Text = txt
-    b.TextColor3 = T.Tx2
+    b.TextColor3 = T.Tx2; pcall(function() b:SetAttribute("ThemeColorRole_TextColor3", "Tx2") end)
     b.AutoButtonColor = false
     Corner(b, 6)
     Stroke(b, T.Bd, 1, 0.4)
     b.MouseEnter:Connect(function()
         TweenService:Create(b, TweenInfo.new(0.12), { BackgroundColor3 = T.Hover })
-        b.TextColor3 = T.White
+        b.TextColor3 = T.White; pcall(function() b:SetAttribute("ThemeColorRole_TextColor3", "White") end)
     end)
     b.MouseLeave:Connect(function()
         TweenService:Create(b, TweenInfo.new(0.12), { BackgroundColor3 = T.Elev })
-        b.TextColor3 = T.Tx2
+        b.TextColor3 = T.Tx2; pcall(function() b:SetAttribute("ThemeColorRole_TextColor3", "Tx2") end)
     end)
     return b
 end
@@ -513,36 +803,71 @@ local function _cfgId(parent, label)
 end
 local Pages = {}
 local activePage
+local SBItems, refreshSB, SearchPageHits
 local SearchQuery = ""
+-- Split a query into whitespace-separated terms. An entry matches only if EVERY term is found in its
+-- haystack, so multi-word / out-of-order searches work ("lock aim", "aim head", "night shader").
+local function _searchTokens(q)
+    local t = {}
+    for w in string.gmatch(q, "%S+") do t[#t + 1] = w end
+    return t
+end
 local function applySearch()
-    local q = string.lower(SearchQuery)
+    -- trim leading/trailing spaces so a stray space doesn't wipe every result
+    local q = (string.lower(SearchQuery):gsub("^%s+", ""):gsub("%s+$", ""))
+    local tokens = _searchTokens(q)
     local cardVis = {}
+    SearchPageHits = {}
     for _, e in ipairs(UIRegistry) do
         if e.row and e.row.Parent then
-            local vis = (q == "") or (string.find(string.lower(e.label), q, 1, true) ~= nil)
+            local vis = true
+            if #tokens > 0 then
+                -- Match against the control label AND its section title AND its tab name, so you can
+                -- search by feature ("aimlock"), by section ("sheriff"), or by tab ("combat").
+                local card = e.card
+                local page = card and card.Parent
+                local hay = e.label
+                    .. " " .. string.lower(card and card.Name or "")
+                    .. " " .. string.lower(page and page.Name or "")
+                for _, tok in ipairs(tokens) do
+                    if not string.find(hay, tok, 1, true) then vis = false; break end
+                end
+            end
             e.row.Visible = vis
-            if vis and e.card then cardVis[e.card] = true end
+            if vis and e.card then
+                cardVis[e.card] = true
+                local page = e.card.Parent
+                if page then SearchPageHits[page] = true end
+            end
         end
     end
     for _, e in ipairs(UIRegistry) do
         if e.card and e.card.Parent then
-            e.card.Visible = (q == "") or (cardVis[e.card] == true)
+            e.card.Visible = (#tokens == 0) or (cardVis[e.card] == true)
         end
     end
-    if q == "" then
+    if #tokens == 0 then
+        -- Not searching: restore the normal single active page and hide the search headers.
         for _, pg in pairs(Pages) do
             pg.Visible = (pg == activePage)
+            local h = pg:FindFirstChild("SearchHdr"); if h then h.Visible = false end
         end
     else
+        -- Searching: show EVERY tab that has a match. ContentArea has a UIListLayout, so the visible
+        -- pages stack into one scrollable list — the matching settings from all tabs appear together,
+        -- each with its live slider/toggle. A per-page header labels which tab each group came from.
         for _, pg in pairs(Pages) do
-            local hasVis = false
-            for _, c in ipairs(pg:GetChildren()) do
-                if c:IsA("Frame") and c.Visible then
-                    hasVis = true
-                    break
-                end
+            local hit = SearchPageHits[pg] == true
+            pg.Visible = hit
+            local h = pg:FindFirstChild("SearchHdr"); if h then h.Visible = hit end
+        end
+    end
+    -- Sidebar dots: flag every tab that has matches.
+    if SBItems then
+        for _, item in ipairs(SBItems) do
+            if item.dot then
+                item.dot.Visible = (#tokens > 0) and (SearchPageHits[item.page] == true)
             end
-            pg.Visible = hasVis
         end
     end
 end
@@ -551,11 +876,11 @@ SearchBox.Parent = TBar
 SearchBox.AnchorPoint = Vector2.new(1, 0.5)
 SearchBox.Position = UDim2.new(1, -76, 0.5, 0)
 SearchBox.Size = UDim2.new(0, 150, 0, 22)
-SearchBox.BackgroundColor3 = T.Elev
+SearchBox.BackgroundColor3 = T.Elev; pcall(function() SearchBox:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
 SearchBox.BorderSizePixel = 0
 SearchBox.Font = F
 SearchBox.TextSize = 12
-SearchBox.TextColor3 = T.Tx
+SearchBox.TextColor3 = T.Tx; pcall(function() SearchBox:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
 SearchBox.PlaceholderText = "Search features..."
 SearchBox.PlaceholderColor3 = T.Tx4
 SearchBox.Text = ""
@@ -592,38 +917,556 @@ end
 local SB = Instance.new("ScrollingFrame")
 SB.Name = "Sidebar"
 SB.Parent = Main
-SB.BackgroundColor3 = T.Sidebar
+SB.BackgroundColor3 = T.Sidebar; pcall(function() SB:SetAttribute("ThemeColorRole_BackgroundColor3", "Sidebar") end)
 SB.BorderSizePixel = 0
-SB.Position = UDim2.new(0, 0, 0, 41)
-SB.Size = UDim2.new(0, 140, 1, -67)
+SB.Position = UDim2.new(0, 0, 0, 89)
+SB.Size = UDim2.new(0, 110, 1, -89)
 SB.CanvasSize = UDim2.new(0, 0, 0, 0)
 SB.AutomaticCanvasSize = Enum.AutomaticSize.Y
 SB.ScrollBarThickness = 2
-SB.ScrollBarImageColor3 = T.Tx3
+SB.ScrollBarImageColor3 = T.Tx3; pcall(function() SB:SetAttribute("ThemeColorRole_ScrollBarImageColor3", "Tx3") end)
 SB.ScrollBarImageTransparency = 0.5
 local SBLine = Instance.new("Frame")
 SBLine.Parent = Main
-SBLine.BackgroundColor3 = T.Bd
+SBLine.BackgroundColor3 = T.Bd; pcall(function() SBLine:SetAttribute("ThemeColorRole_BackgroundColor3", "Bd") end)
 SBLine.BackgroundTransparency = 0.3
 SBLine.BorderSizePixel = 0
-SBLine.Position = UDim2.new(0, 140, 0, 48)
-SBLine.Size = UDim2.new(0, 1, 1, -82)
+SBLine.Position = UDim2.new(0, 110, 0, 41)
+SBLine.Size = UDim2.new(0, 1, 1, -41)
 local SBLayout = Instance.new("UIListLayout")
 SBLayout.Parent = SB
 SBLayout.SortOrder = Enum.SortOrder.LayoutOrder
 SBLayout.Padding = UDim.new(0, 4)
 Pad(SB, 12, 12, 8, 8)
+
+-- Settings Modal definition
+do
+local SettingsModal = Instance.new("Frame")
+SettingsModal.Name = "InertiaSettings"
+SettingsModal.Parent = SG
+SettingsModal.Active = true
+SettingsModal.AnchorPoint = Vector2.new(0.5, 0.5)
+SettingsModal.Position = UDim2.new(0.5, 0, 0.5, 0)
+SettingsModal.Size = UDim2.fromOffset(260, 240)
+SettingsModal.BackgroundColor3 = T.Card; pcall(function() SettingsModal:SetAttribute("ThemeColorRole_BackgroundColor3", "Card") end)
+SettingsModal.BorderSizePixel = 0
+SettingsModal.ZIndex = 999
+SettingsModal.Visible = false
+Corner(SettingsModal, 12)
+Stroke(SettingsModal, T.Bd2, 1.2, 0.4)
+Shadow(SettingsModal, 0.4)
+
+-- Modal Header
+local mHdr = Instance.new("TextLabel")
+mHdr.Parent = SettingsModal
+mHdr.BackgroundTransparency = 1
+mHdr.Position = UDim2.new(0, 16, 0, 10)
+mHdr.Size = UDim2.new(1, -64, 0, 24)
+mHdr.Font = FB
+mHdr.TextSize = 15
+mHdr.TextColor3 = T.White; pcall(function() mHdr:SetAttribute("ThemeColorRole_TextColor3", "White") end)
+mHdr.TextXAlignment = Enum.TextXAlignment.Left
+mHdr.Text = "Settings"
+mHdr.ZIndex = 1000
+
+-- Close button
+local mClose = Instance.new("TextButton")
+mClose.Parent = SettingsModal
+mClose.AnchorPoint = Vector2.new(1, 0)
+mClose.Position = UDim2.new(1, -10, 0, 10)
+mClose.Size = UDim2.fromOffset(24, 24)
+mClose.BackgroundColor3 = T.Elev; pcall(function() mClose:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
+mClose.BorderSizePixel = 0
+mClose.Font = FB
+mClose.TextSize = 13
+mClose.TextColor3 = T.Tx2; pcall(function() mClose:SetAttribute("ThemeColorRole_TextColor3", "Tx2") end)
+mClose.Text = "X"
+mClose.ZIndex = 1000
+Corner(mClose, 6)
+Stroke(mClose, T.Bd, 1, 0.4)
+mClose.MouseButton1Click:Connect(function()
+    SettingsModal.Visible = false
+    SFX.Off()
+end)
+
+-- Layout for Settings
+local mScroll = Instance.new("ScrollingFrame")
+mScroll.Parent = SettingsModal
+mScroll.BackgroundTransparency = 1
+mScroll.BorderSizePixel = 0
+mScroll.Position = UDim2.new(0, 12, 0, 36)
+mScroll.Size = UDim2.new(1, -24, 1, -48)
+mScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+mScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+mScroll.ScrollBarThickness = 3
+mScroll.ScrollBarImageColor3 = T.Tx3; pcall(function() mScroll:SetAttribute("ThemeColorRole_ScrollBarImageColor3", "Tx3") end)
+mScroll.ZIndex = 1000
+
+local mList = Instance.new("UIListLayout")
+mList.Parent = mScroll
+mList.SortOrder = Enum.SortOrder.LayoutOrder
+mList.Padding = UDim.new(0, 12)
+
+-- Helper to make setting labels
+local function mkModalLabel(text, order)
+    local l = Instance.new("TextLabel")
+    l.Parent = mScroll
+    l.LayoutOrder = order
+    l.BackgroundTransparency = 1
+    l.Size = UDim2.new(1, 0, 0, 18)
+    l.Font = FM
+    l.TextSize = 12
+    l.TextColor3 = T.Tx2; pcall(function() l:SetAttribute("ThemeColorRole_TextColor3", "Tx2") end)
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.Text = text
+    l.ZIndex = 1001
+    return l
+end
+
+-- 1. Language Option (Cycle style)
+local langLabel = mkModalLabel("Language", 1)
+local langBtn = Instance.new("TextButton")
+langBtn.Parent = mScroll
+langBtn.LayoutOrder = 2
+langBtn.Size = UDim2.new(1, 0, 0, 28)
+langBtn.BackgroundColor3 = T.Elev; pcall(function() langBtn:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
+langBtn.BorderSizePixel = 0
+langBtn.Font = F
+langBtn.TextSize = 13
+langBtn.TextColor3 = T.White; pcall(function() langBtn:SetAttribute("ThemeColorRole_TextColor3", "White") end)
+langBtn.Text = S.Language or "ENG"
+langBtn.ZIndex = 1001
+Corner(langBtn, 6)
+Stroke(langBtn, T.Bd, 1, 0.4)
+
+local langList = {"ENG", "RU", "UK", "SPANISH"}
+langBtn.MouseButton1Click:Connect(function()
+    local cur = table.find(langList, S.Language or "ENG") or 1
+    local nextIdx = (cur % #langList) + 1
+    local nextLang = langList[nextIdx]
+    S.Language = nextLang
+    langBtn.Text = nextLang
+    updateLanguage()
+    SFX.Click()
+    pcall(saveConfig, "_autoload")
+end)
+
+-- 2. Text Size Option
+local sizeLabel = mkModalLabel("Text Size", 3)
+local sizeBtn = Instance.new("TextButton")
+sizeBtn.Parent = mScroll
+sizeBtn.LayoutOrder = 4
+sizeBtn.Size = UDim2.new(1, 0, 0, 28)
+sizeBtn.BackgroundColor3 = T.Elev; pcall(function() sizeBtn:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
+sizeBtn.BorderSizePixel = 0
+sizeBtn.Font = F
+sizeBtn.TextSize = 13
+sizeBtn.TextColor3 = T.White; pcall(function() sizeBtn:SetAttribute("ThemeColorRole_TextColor3", "White") end)
+local sizeNames = { [0.85] = "Small", [1.0] = "Medium", [1.15] = "Large" }
+sizeBtn.Text = sizeNames[S.TextSizeScale or 1.0] or "Medium"
+sizeBtn.ZIndex = 1001
+Corner(sizeBtn, 6)
+Stroke(sizeBtn, T.Bd, 1, 0.4)
+
+local sizeList = {0.85, 1.0, 1.15}
+sizeBtn.MouseButton1Click:Connect(function()
+    local cur = table.find(sizeList, S.TextSizeScale or 1.0) or 2
+    local nextIdx = (cur % #sizeList) + 1
+    local nextScale = sizeList[nextIdx]
+    S.TextSizeScale = nextScale
+    sizeBtn.Text = sizeNames[nextScale]
+    updateTextSizes()
+    SFX.Click()
+    pcall(saveConfig, "_autoload")
+end)
+
+-- 3. Theme Selector
+local themeLabel = mkModalLabel("Theme Style", 5)
+local themeContainer = Instance.new("Frame")
+themeContainer.Parent = mScroll
+themeContainer.LayoutOrder = 6
+themeContainer.BackgroundTransparency = 1
+themeContainer.Size = UDim2.new(1, 0, 0, 90)
+themeContainer.ZIndex = 1001
+
+local themeScroll = Instance.new("ScrollingFrame")
+themeScroll.Parent = themeContainer
+themeScroll.BackgroundTransparency = 0.5
+themeScroll.BackgroundColor3 = T.Elev; pcall(function() themeScroll:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
+themeScroll.BorderSizePixel = 0
+themeScroll.Size = UDim2.new(1, 0, 1, 0)
+themeScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+themeScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+themeScroll.ScrollBarThickness = 3
+themeScroll.ScrollBarImageColor3 = T.Tx3; pcall(function() themeScroll:SetAttribute("ThemeColorRole_ScrollBarImageColor3", "Tx3") end)
+themeScroll.ZIndex = 1001
+Corner(themeScroll, 6)
+Stroke(themeScroll, T.Bd, 1, 0.4)
+Pad(themeScroll, 6, 6, 6, 6)
+
+local themeListLayout = Instance.new("UIListLayout")
+themeListLayout.Parent = themeScroll
+themeListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+themeListLayout.Padding = UDim.new(0, 4)
+
+local themeNames = {
+    "Monochrome", "Neon Blue", "Ruby Red", "Emerald Green",
+    "Amethyst Purple", "Sakura Pink", "Amber Gold", "Midnight Navy",
+    "Toxic Lime", "Sunset Orange"
+}
+
+for idx, tName in ipairs(themeNames) do
+    local btn = Instance.new("TextButton")
+    btn.Name = tName
+    btn.Parent = themeScroll
+    btn.LayoutOrder = idx
+    btn.Size = UDim2.new(1, 0, 0, 26)
+    btn.BackgroundColor3 = T.Card; pcall(function() btn:SetAttribute("ThemeColorRole_BackgroundColor3", "Card") end)
+    btn.BorderSizePixel = 0
+    btn.Font = F
+    btn.TextSize = 12
+    btn.TextColor3 = T.Tx2; pcall(function() btn:SetAttribute("ThemeColorRole_TextColor3", "Tx2") end)
+    btn.Text = "   " .. tName
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.ZIndex = 1002
+    Corner(btn, 4)
+    Stroke(btn, T.Bd, 1, 0.4)
+
+    local pDot = Instance.new("Frame")
+    pDot.Parent = btn
+    pDot.AnchorPoint = Vector2.new(1, 0.5)
+    pDot.Position = UDim2.new(1, -8, 0.5, 0)
+    pDot.Size = UDim2.fromOffset(10, 10)
+    pDot.BackgroundColor3 = Themes[tName].Accent
+    pDot.BorderSizePixel = 0
+    pDot.ZIndex = 1003
+    Corner(pDot, 9999)
+
+    btn.MouseButton1Click:Connect(function()
+        applyTheme(tName)
+        SFX.Click()
+        pcall(saveConfig, "_autoload")
+    end)
+    btn.MouseEnter:Connect(function() btn.TextColor3 = T.White; pcall(function() btn:SetAttribute("ThemeColorRole_TextColor3", "White") end) end)
+    btn.MouseLeave:Connect(function() btn.TextColor3 = T.Tx2; pcall(function() btn:SetAttribute("ThemeColorRole_TextColor3", "Tx2") end) end)
+end
+
+-- Profile Header
+local ProfileHeader = Instance.new("Frame")
+ProfileHeader.Name = "ProfileHeader"
+ProfileHeader.Parent = Main
+ProfileHeader.Position = UDim2.new(0, 0, 0, 41)
+ProfileHeader.Size = UDim2.new(0, 110, 0, 48)
+ProfileHeader.BackgroundColor3 = T.Sidebar; pcall(function() ProfileHeader:SetAttribute("ThemeColorRole_BackgroundColor3", "Sidebar") end)
+ProfileHeader.BorderSizePixel = 0
+
+local phLine = Instance.new("Frame")
+phLine.Name = "phLine"
+phLine.Parent = ProfileHeader
+phLine.BackgroundColor3 = T.Bd; pcall(function() phLine:SetAttribute("ThemeColorRole_BackgroundColor3", "Bd") end)
+phLine.BackgroundTransparency = 0.3
+phLine.BorderSizePixel = 0
+phLine.Position = UDim2.new(0, 0, 1, -1)
+phLine.Size = UDim2.new(1, 0, 0, 1)
+
+local avatarUrl = "rbxasset://textures/ui/Guidetool/PlayerIcon.png"
+pcall(function()
+    avatarUrl = Players:GetUserThumbnailAsync(LP.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+end)
+
+local AvatarImage = Instance.new("ImageLabel")
+AvatarImage.Parent = ProfileHeader
+AvatarImage.Position = UDim2.new(0, 6, 0.5, -14)
+AvatarImage.Size = UDim2.fromOffset(28, 28)
+AvatarImage.BackgroundTransparency = 1
+AvatarImage.Image = avatarUrl
+AvatarImage.ZIndex = 50
+Corner(AvatarImage, 9999)
+Stroke(AvatarImage, T.Bd2, 1, 0.4)
+
+local UserLabel = Instance.new("TextLabel")
+UserLabel.Parent = ProfileHeader
+UserLabel.BackgroundTransparency = 1
+UserLabel.Position = UDim2.new(0, 40, 0.5, -14)
+UserLabel.Size = UDim2.new(1, -44, 0, 14)
+UserLabel.Font = FM
+UserLabel.TextSize = 10
+UserLabel.TextColor3 = T.Tx; pcall(function() UserLabel:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
+UserLabel.TextXAlignment = Enum.TextXAlignment.Left
+UserLabel.TextTruncate = Enum.TextTruncate.AtEnd
+UserLabel.Text = LP.DisplayName
+UserLabel.ZIndex = 50
+
+local SubLabel = Instance.new("TextLabel")
+SubLabel.Parent = ProfileHeader
+SubLabel.BackgroundTransparency = 1
+SubLabel.Position = UDim2.new(0, 40, 0.5, 0)
+SubLabel.Size = UDim2.new(1, -44, 0, 10)
+SubLabel.Font = F
+SubLabel.TextSize = 8
+SubLabel.TextColor3 = T.Tx3; pcall(function() SubLabel:SetAttribute("ThemeColorRole_TextColor3", "Tx3") end)
+SubLabel.TextXAlignment = Enum.TextXAlignment.Left
+SubLabel.Text = "Premium"
+SubLabel.ZIndex = 50
+
+local ProfileBtn = Instance.new("TextButton")
+ProfileBtn.Parent = ProfileHeader
+ProfileBtn.Size = UDim2.fromScale(1, 1)
+ProfileBtn.BackgroundTransparency = 1
+ProfileBtn.Text = ""
+ProfileBtn.ZIndex = 51
+
+ProfileBtn.MouseButton1Click:Connect(function()
+    SettingsModal.Visible = not SettingsModal.Visible
+    if SettingsModal.Visible then SFX.On() else SFX.Off() end
+end)
+
+mScroll.Active = true
+
+-- Create Mobile UI Components (floating toggle button and quick action panel)
+local function createMobileHUD()
+    if SG:FindFirstChild("MobileToggle") then return end
+    
+    local MobileToggle = Instance.new("ImageButton")
+    MobileToggle.Name = "MobileToggle"
+    MobileToggle.Parent = SG
+    MobileToggle.Size = UDim2.fromOffset(36, 36)
+    MobileToggle.Position = UDim2.new(0, 10, 0, 10)
+    MobileToggle.BackgroundColor3 = T.Card; pcall(function() MobileToggle:SetAttribute("ThemeColorRole_BackgroundColor3", "Card") end)
+    MobileToggle.BorderSizePixel = 0
+    MobileToggle.ZIndex = 2000
+    Corner(MobileToggle, 9999)
+    Stroke(MobileToggle, T.Bd2, 1, 0.4)
+    Shadow(MobileToggle, 0.3)
+    
+    local tIcon = Instance.new("Frame")
+    tIcon.Parent = MobileToggle
+    tIcon.BackgroundTransparency = 1
+    tIcon.Size = UDim2.fromScale(0.6, 0.6)
+    tIcon.Position = UDim2.fromScale(0.2, 0.2)
+    
+    local barrel = Instance.new("Frame")
+    barrel.Parent = tIcon
+    barrel.BackgroundColor3 = T.White; pcall(function() barrel:SetAttribute("ThemeColorRole_BackgroundColor3", "White") end)
+    barrel.BorderSizePixel = 0
+    barrel.Position = UDim2.new(0.2, 0, 0.2, 0)
+    barrel.Size = UDim2.new(0.6, 0, 0.25, 0)
+    Corner(barrel, 1)
+    
+    local grip = Instance.new("Frame")
+    grip.Parent = tIcon
+    grip.BackgroundColor3 = T.White; pcall(function() grip:SetAttribute("ThemeColorRole_BackgroundColor3", "White") end)
+    grip.BorderSizePixel = 0
+    grip.Position = UDim2.new(0.2, 0, 0.45, 0)
+    grip.Size = UDim2.new(0.25, 0, 0.4, 0)
+    Corner(grip, 1)
+    
+    local trig = Instance.new("Frame")
+    trig.Parent = tIcon
+    trig.BackgroundColor3 = T.White; pcall(function() trig:SetAttribute("ThemeColorRole_BackgroundColor3", "White") end)
+    trig.BorderSizePixel = 0
+    trig.Position = UDim2.new(0.45, 0, 0.45, 0)
+    trig.Size = UDim2.new(0.1, 0, 0.15, 0)
+    
+    MobileToggle.MouseButton1Click:Connect(function()
+        Main.Visible = not Main.Visible
+        SFX.Click()
+    end)
+    
+    do
+        local dr, ds, sp
+        MobileToggle.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dr = true
+                ds = i.Position
+                sp = MobileToggle.Position
+            end
+        end)
+        tc(UIS.InputChanged:Connect(function(i)
+            if dr and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+                local d = i.Position - ds
+                MobileToggle.Position = UDim2.new(sp.X.Scale, sp.X.Offset + d.X, sp.Y.Scale, sp.Y.Offset + d.Y)
+            end
+        end))
+        tc(UIS.InputEnded:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dr = false
+            end
+        end))
+    end
+    
+    local QuickActions = Instance.new("Frame")
+    QuickActions.Name = "MobileHUD"
+    QuickActions.Parent = SG
+    QuickActions.Active = true
+    QuickActions.Size = UDim2.fromOffset(44, 280)
+    QuickActions.Position = UDim2.new(1, -60, 0.5, -140)
+    QuickActions.BackgroundColor3 = T.Card; pcall(function() QuickActions:SetAttribute("ThemeColorRole_BackgroundColor3", "Card") end)
+    QuickActions.BorderSizePixel = 0
+    QuickActions.ZIndex = 2000
+    Corner(QuickActions, 8)
+    Stroke(QuickActions, T.Bd2, 1.2, 0.4)
+    Shadow(QuickActions, 0.3)
+    
+    local qList = Instance.new("UIListLayout")
+    qList.Parent = QuickActions
+    qList.SortOrder = Enum.SortOrder.LayoutOrder
+    qList.Padding = UDim.new(0, 5)
+    Pad(QuickActions, 5, 5, 5, 5)
+    
+    local function mkQAButton(name, text, order, toggleField, callback)
+        local btn = Instance.new("TextButton")
+        btn.Name = name
+        btn.Parent = QuickActions
+        btn.LayoutOrder = order
+        btn.Size = UDim2.fromOffset(34, 34)
+        btn.BackgroundColor3 = T.Elev; pcall(function() btn:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
+        btn.BorderSizePixel = 0
+        btn.Font = FB
+        btn.TextSize = 10
+        btn.TextColor3 = T.White; pcall(function() btn:SetAttribute("ThemeColorRole_TextColor3", "White") end)
+        btn.Text = text
+        btn.ZIndex = 2001
+        Corner(btn, 6)
+        Stroke(btn, T.Bd, 1, 0.4)
+        
+        local function updateState()
+            local active = false
+            if toggleField then
+                active = S[toggleField] == true
+            end
+            btn:SetAttribute("Active", active)
+            btn.BackgroundColor3 = active and T.Accent or T.Elev
+            btn.TextColor3 = active and T.KnobOn or T.White
+        end
+        
+        btn.MouseButton1Click:Connect(function()
+            SFX.Click()
+            if callback then
+                callback(btn)
+            else
+                if toggleField then
+                    S[toggleField] = not S[toggleField]
+                    updateState()
+                end
+            end
+        end)
+        
+        task.spawn(function()
+            while QuickActions and QuickActions.Parent do
+                updateState()
+                task.wait(0.25)
+            end
+        end)
+        
+        return btn
+    end
+    
+    local tpBtn = mkQAButton("TP", "TP", 1, "_mobileTPActive", function(btn)
+        S._mobileTPActive = not S._mobileTPActive
+        S._mobileFlingActive = false
+        btn:SetAttribute("Active", S._mobileTPActive)
+        btn.BackgroundColor3 = S._mobileTPActive and T.Accent or T.Elev
+        btn.TextColor3 = S._mobileTPActive and T.KnobOn or T.White
+        if S._mobileTPActive then
+            Notify("Mobile Actions", "Tap anywhere in world to teleport", 2.5)
+        end
+    end)
+    
+    local flingBtn = mkQAButton("Fling", "Fling", 2, "_mobileFlingActive", function(btn)
+        S._mobileFlingActive = not S._mobileFlingActive
+        S._mobileTPActive = false
+        btn:SetAttribute("Active", S._mobileFlingActive)
+        btn.BackgroundColor3 = S._mobileFlingActive and T.Accent or T.Elev
+        btn.TextColor3 = S._mobileFlingActive and T.KnobOn or T.White
+        if S._mobileFlingActive then
+            Notify("Mobile Actions", "Tap any player in world to Fling them", 2.5)
+        end
+    end)
+    
+    local blinkBtn = mkQAButton("Blink", "BL", 3, "Blink", function(btn)
+        S.Blink = not S.Blink
+        if S.Blink then
+            if startBlink then startBlink() end
+        else
+            if stopBlink then stopBlink() end
+        end
+        btn:SetAttribute("Active", S.Blink)
+        btn.BackgroundColor3 = S.Blink and T.Accent or T.Elev
+        btn.TextColor3 = S.Blink and T.KnobOn or T.White
+    end)
+    
+    local flyBtn = mkQAButton("Fly", "FLY", 4, "Fly")
+    local ncBtn = mkQAButton("Noclip", "NC", 5, "NoClip")
+    
+    local grabBtn = mkQAButton("Grab Gun", "GG", 6, nil, function()
+        if grabGun then grabGun() end
+    end)
+    
+    local killBtn = mkQAButton("Kill Murderer", "KM", 7, nil, function()
+        if killMurder then killMurder() end
+    end)
+    
+    do
+        local dr, ds, sp
+        QuickActions.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dr = true
+                ds = i.Position
+                sp = QuickActions.Position
+            end
+        end)
+        tc(UIS.InputChanged:Connect(function(i)
+            if dr and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+                local d = i.Position - ds
+                QuickActions.Position = UDim2.new(sp.X.Scale, sp.X.Offset + d.X, sp.Y.Scale, sp.Y.Offset + d.Y)
+            end
+        end))
+        tc(UIS.InputEnded:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dr = false
+            end
+        end))
+    end
+end
+pcall(createMobileHUD)
+
+-- Make settings modal draggable by header
+do
+    local dr, ds, sp
+    mHdr.Active = true
+    mHdr.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then
+            dr = true
+            ds = i.Position
+            sp = SettingsModal.Position
+        end
+    end)
+    tc(UIS.InputChanged:Connect(function(i)
+        if dr and i.UserInputType == Enum.UserInputType.MouseMovement then
+            local d = i.Position - ds
+            SettingsModal.Position = UDim2.new(sp.X.Scale, sp.X.Offset + d.X, sp.Y.Scale, sp.Y.Offset + d.Y)
+        end
+    end))
+    tc(UIS.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then
+            dr = false
+        end
+    end))
+end
+
+end
 local ContentArea = Instance.new("ScrollingFrame")
 ContentArea.Name = "Content"
 ContentArea.Parent = Main
 ContentArea.BackgroundTransparency = 1
 ContentArea.BorderSizePixel = 0
-ContentArea.Position = UDim2.new(0, 146, 0, 41)
-ContentArea.Size = UDim2.new(1, -152, 1, -67)
+ContentArea.Position = UDim2.new(0, 116, 0, 41)
+ContentArea.Size = UDim2.new(1, -122, 1, -41)
 ContentArea.CanvasSize = UDim2.new(0, 0, 0, 0)
 ContentArea.AutomaticCanvasSize = Enum.AutomaticSize.Y
 ContentArea.ScrollBarThickness = 3
-ContentArea.ScrollBarImageColor3 = T.Tx3
+ContentArea.ScrollBarImageColor3 = T.Tx3; pcall(function() ContentArea:SetAttribute("ThemeColorRole_ScrollBarImageColor3", "Tx3") end)
 ContentArea.ScrollBarImageTransparency = 0.5
 local caLayout = Instance.new("UIListLayout")
 caLayout.Parent = ContentArea
@@ -635,10 +1478,11 @@ StatusBar.BackgroundColor3 = Color3.fromRGB(4, 4, 4)
 StatusBar.BorderSizePixel = 0
 StatusBar.Position = UDim2.new(0, 0, 1, -26)
 StatusBar.Size = UDim2.new(1, 0, 0, 26)
+StatusBar.Visible = false
 local sbTop = Instance.new("Frame")
 sbTop.Parent = StatusBar
 sbTop.BorderSizePixel = 0
-sbTop.BackgroundColor3 = T.Bd
+sbTop.BackgroundColor3 = T.Bd; pcall(function() sbTop:SetAttribute("ThemeColorRole_BackgroundColor3", "Bd") end)
 sbTop.BackgroundTransparency = 0.3
 sbTop.Size = UDim2.new(1, 0, 0, 1)
 local StatusRole = Instance.new("TextLabel")
@@ -648,7 +1492,7 @@ StatusRole.Position = UDim2.new(0, 16, 0, 0)
 StatusRole.Size = UDim2.new(0, 150, 1, 0)
 StatusRole.Font = FM
 StatusRole.TextSize = 12
-StatusRole.TextColor3 = T.Tx2
+StatusRole.TextColor3 = T.Tx2; pcall(function() StatusRole:SetAttribute("ThemeColorRole_TextColor3", "Tx2") end)
 StatusRole.TextXAlignment = Enum.TextXAlignment.Left
 StatusRole.Text = "ROLE  ..."
 local StatusFPS = Instance.new("TextLabel")
@@ -658,7 +1502,7 @@ StatusFPS.Position = UDim2.new(0, 180, 0, 0)
 StatusFPS.Size = UDim2.new(0, 80, 1, 0)
 StatusFPS.Font = FM
 StatusFPS.TextSize = 12
-StatusFPS.TextColor3 = T.Tx
+StatusFPS.TextColor3 = T.Tx; pcall(function() StatusFPS:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
 StatusFPS.TextXAlignment = Enum.TextXAlignment.Left
 StatusFPS.Text = "FPS  0"
 local StatusPing = Instance.new("TextLabel")
@@ -668,7 +1512,7 @@ StatusPing.Position = UDim2.new(0, 270, 0, 0)
 StatusPing.Size = UDim2.new(0, 90, 1, 0)
 StatusPing.Font = FM
 StatusPing.TextSize = 12
-StatusPing.TextColor3 = T.Tx3
+StatusPing.TextColor3 = T.Tx3; pcall(function() StatusPing:SetAttribute("ThemeColorRole_TextColor3", "Tx3") end)
 StatusPing.TextXAlignment = Enum.TextXAlignment.Left
 StatusPing.Text = ""
 local StatusHint = Instance.new("TextLabel")
@@ -679,10 +1523,11 @@ StatusHint.Position = UDim2.new(1, -16, 0, 0)
 StatusHint.Size = UDim2.new(0, 200, 1, 0)
 StatusHint.Font = F
 StatusHint.TextSize = 11
-StatusHint.TextColor3 = T.Tx4
+StatusHint.TextColor3 = T.Tx4; pcall(function() StatusHint:SetAttribute("ThemeColorRole_TextColor3", "Tx4") end)
 StatusHint.TextXAlignment = Enum.TextXAlignment.Right
 StatusHint.Text = "LCtrl = menu  |  RMB = bind"
 local fpsCount, lastFpsT, curFPS = 0, tick(), 0
+local lastStatusT = 0  -- throttles the role/ping status-bar labels (no need to recompute per frame)
 local function mkPage(name)
     local sf = Instance.new("Frame")
     sf.Name = name
@@ -698,32 +1543,47 @@ local function mkPage(name)
     l.SortOrder = Enum.SortOrder.LayoutOrder
     l.Padding = UDim.new(0, 12)
     Pad(sf, 8, 12, 6, 8)
+    -- Tab header, shown ONLY while searching so the combined multi-tab results list is labelled by
+    -- which tab each group of settings came from. Hidden during normal single-tab browsing.
+    local hdr = Instance.new("TextLabel")
+    hdr.Name = "SearchHdr"
+    hdr.Parent = sf
+    hdr.LayoutOrder = -1
+    hdr.BackgroundTransparency = 1
+    hdr.Size = UDim2.new(1, 0, 0, 20)
+    hdr.Font = FB
+    hdr.TextSize = 13
+    hdr.TextColor3 = T.Tx; pcall(function() hdr:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
+    hdr.TextXAlignment = Enum.TextXAlignment.Left
+    hdr.Text = string.upper(name)
+    hdr.Visible = false
     Pages[name] = sf
     return sf
 end
-local PVisuals  = mkPage("Visuals")
-local PCombat   = mkPage("Combat")
-local PMisc     = mkPage("Misc")
-local PFun      = mkPage("Fun")
-local PTargets  = mkPage("Targets")
-local PTeleport = mkPage("Teleport")
-local PHUD      = mkPage("HUD")
-local PShaders  = mkPage("Shaders")
-local PWorld    = mkPage("World")
-local PAutofarm = mkPage("Autofarm")
-local PServers  = mkPage("Servers")
-local PConfig   = mkPage("Config")
-PVisuals.Visible = true
-local SBItems = {}
-activePage = PVisuals
-local function refreshSB()
+mkPage("Visuals")
+mkPage("Combat")
+mkPage("Motion")
+mkPage("Misc")
+mkPage("Fun")
+mkPage("Targets")
+mkPage("Teleport")
+mkPage("HUD")
+mkPage("Shaders")
+mkPage("World")
+mkPage("Autofarm")
+mkPage("Servers")
+mkPage("Config")
+Pages.Visuals.Visible = true
+SBItems = {}
+activePage = Pages.Visuals
+refreshSB = function()
     for _, item in ipairs(SBItems) do
         local on = (item.page == activePage)
         item.bar.Visible = on
         item.icon.setColor(on and T.White or T.Tx3)
         item.label.TextColor3 = on and T.White or T.Tx2
         item.label.Font = on and FM or F
-        item.btn.BackgroundColor3 = T.Elev
+        item.btn.BackgroundColor3 = T.Elev; pcall(function() item.btn:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
         item.btn.BackgroundTransparency = on and 0 or 1
         if on then
             item.btn.BorderSizePixel = 0
@@ -749,7 +1609,7 @@ local function mkSBItem(name, iconKind, page, order)
     bar.Parent = btn
     bar.Size = UDim2.new(0, 2, 0, 18)
     bar.Position = UDim2.new(0, 0, 0.5, -9)
-    bar.BackgroundColor3 = T.White
+    bar.BackgroundColor3 = T.White; pcall(function() bar:SetAttribute("ThemeColorRole_BackgroundColor3", "White") end)
     bar.BorderSizePixel = 0
     bar.Visible = false
     Corner(bar, 2)
@@ -762,43 +1622,76 @@ local function mkSBItem(name, iconKind, page, order)
     label.Size = UDim2.new(1, -44, 1, 0)
     label.Font = F
     label.TextSize = 14
-    label.TextColor3 = T.Tx2
+    label.TextColor3 = T.Tx2; pcall(function() label:SetAttribute("ThemeColorRole_TextColor3", "Tx2") end)
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Text = name
+    -- Small dot shown while searching if THIS tab has matches but isn't the one on screen.
+    local dot = Instance.new("Frame")
+    dot.Name = "MatchDot"
+    dot.Parent = btn
+    dot.AnchorPoint = Vector2.new(1, 0.5)
+    dot.Position = UDim2.new(1, -18, 0.5, 0)
+    dot.Size = UDim2.new(0, 6, 0, 6)
+    dot.BackgroundColor3 = T.White; pcall(function() dot:SetAttribute("ThemeColorRole_BackgroundColor3", "White") end)
+    dot.BorderSizePixel = 0
+    dot.Visible = false
+    Corner(dot, 3)
+    -- Favourite pin (gold dot). Right-click a tab to pin it to the very top of the sidebar.
+    local pin = Instance.new("Frame")
+    pin.Name = "FavPin"
+    pin.Parent = btn
+    pin.AnchorPoint = Vector2.new(1, 0.5)
+    pin.Position = UDim2.new(1, -8, 0.5, 0)
+    pin.Size = UDim2.new(0, 6, 0, 6)
+    pin.BackgroundColor3 = Color3.fromRGB(255, 200, 70)
+    pin.BorderSizePixel = 0
+    pin.Visible = false
+    Corner(pin, 3)
+    local item = { btn = btn, bar = bar, icon = icon, label = label, page = page, dot = dot, pin = pin, order = order, fav = false }
     btn.MouseButton1Click:Connect(function()
         SFX.Click()
-        if SearchBox and SearchBox.Text ~= "" then
-            SearchBox.Text = ""
-        end
+        -- Clicking a tab clears any active search and opens that full tab (setting the SearchBox text
+        -- fires applySearch, which hides the search headers and drops back to single-tab view).
+        if SearchBox and SearchBox.Text ~= "" then SearchBox.Text = "" end
         for _, pg in pairs(Pages) do
             pg.Visible = (pg == page)
         end
         activePage = page
         refreshSB()
     end)
+    -- Right-click toggles favourite: pinned tabs jump to the top (LayoutOrder pushed far below the
+    -- others so they sort first, keeping their relative order); right-click again to unpin.
+    btn.MouseButton2Click:Connect(function()
+        item.fav = not item.fav
+        btn.LayoutOrder = item.fav and (order - 1000) or order
+        pin.Visible = item.fav
+        SFX.Click()
+        Notify("Sidebar", item.fav and (name .. " pinned to top") or (name .. " unpinned"), 2)
+    end)
     btn.MouseEnter:Connect(function()
         if page ~= activePage then
             btn.BackgroundTransparency = 0.35
-            btn.BackgroundColor3 = T.Elev
+            btn.BackgroundColor3 = T.Elev; pcall(function() btn:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
         end
     end)
     btn.MouseLeave:Connect(function()
         refreshSB()
     end)
-    table.insert(SBItems, { btn = btn, bar = bar, icon = icon, label = label, page = page })
+    table.insert(SBItems, item)
 end
-mkSBItem("Visuals", "eye", PVisuals, 1)
-mkSBItem("Shaders", "diamond", PShaders, 2)
-mkSBItem("Combat", "cross", PCombat, 3)
-mkSBItem("Targets", "shield", PTargets, 4)
-mkSBItem("World", "grid", PWorld, 5)
-mkSBItem("Autofarm", "diamond", PAutofarm, 6)
-mkSBItem("Misc", "sliders", PMisc, 7)
-mkSBItem("Fun", "diamond", PFun, 8)
-mkSBItem("Teleport", "diamond", PTeleport, 9)
-mkSBItem("Servers", "server", PServers, 10)
-mkSBItem("HUD", "grid", PHUD, 11)
-mkSBItem("Config", "sliders", PConfig, 12)
+mkSBItem("Visuals", "eye", Pages.Visuals, 1)
+mkSBItem("Shaders", "diamond", Pages.Shaders, 2)
+mkSBItem("Combat", "cross", Pages.Combat, 3)
+mkSBItem("Motion", "sliders", Pages.Motion, 4)
+mkSBItem("Targets", "shield", Pages.Targets, 5)
+mkSBItem("World", "grid", Pages.World, 6)
+mkSBItem("Autofarm", "diamond", Pages.Autofarm, 7)
+mkSBItem("Misc", "sliders", Pages.Misc, 8)
+mkSBItem("Fun", "diamond", Pages.Fun, 9)
+mkSBItem("Teleport", "diamond", Pages.Teleport, 10)
+mkSBItem("Servers", "server", Pages.Servers, 11)
+mkSBItem("HUD", "grid", Pages.HUD, 12)
+mkSBItem("Config", "sliders", Pages.Config, 13)
 refreshSB()
 local BindReg = {}
 local PendingBind = nil
@@ -824,9 +1717,16 @@ tc(UIS.InputBegan:Connect(function(input, processed)
         end
         return
     end
-    if not processed and input.UserInputType == Enum.UserInputType.Keyboard then
-        local e = BindReg[input.KeyCode]
-        if e then e.trigger() end
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        -- Skip only while actually typing in a text box. GetFocusedTextBox is pcall-guarded so that if
+        -- it ever throws on an executor it can't kill the whole trigger branch (that would make every
+        -- bind silently do nothing even though binding worked). trigger() is pcall-guarded too.
+        local typing = false
+        pcall(function() typing = (UIS:GetFocusedTextBox() ~= nil) end)
+        if not typing then
+            local e = BindReg[input.KeyCode]
+            if e and e.trigger then pcall(e.trigger) end
+        end
     end
 end))
 local function mkSection(parent, title, order)
@@ -834,12 +1734,12 @@ local function mkSection(parent, title, order)
     card.Name = title
     card.Parent = parent
     card.LayoutOrder = order
-    card.BackgroundColor3 = T.Card
+    card.BackgroundColor3 = T.Card; card:SetAttribute("ThemeColorRole_BackgroundColor3", "Card"); pcall(function() card:SetAttribute("ThemeColorRole_BackgroundColor3", "Card") end)
     card.BorderSizePixel = 0
     card.Size = UDim2.new(1, 0, 0, 0)
     card.AutomaticSize = Enum.AutomaticSize.Y
     Corner(card, 10)
-    Stroke(card, T.Bd, 1, 0.3)
+    local cardSt = Stroke(card, T.Bd, 1, 0.3); cardSt:SetAttribute("ThemeColorRole_Color", "Bd")
     local inner = Instance.new("Frame")
     inner.Name = "Inner"
     inner.Parent = card
@@ -859,7 +1759,7 @@ local function mkSection(parent, title, order)
     local tick = Instance.new("Frame")
     tick.Parent = hdrRow
     tick.BorderSizePixel = 0
-    tick.BackgroundColor3 = T.White
+    tick.BackgroundColor3 = T.White; pcall(function() tick:SetAttribute("ThemeColorRole_BackgroundColor3", "White") end)
     tick.Position = UDim2.new(0, 0, 0.5, -5)
     tick.Size = UDim2.new(0, 2, 0, 10)
     Corner(tick, 2)
@@ -870,7 +1770,7 @@ local function mkSection(parent, title, order)
     hdr.Size = UDim2.new(1, -10, 1, 0)
     hdr.Font = FB
     hdr.TextSize = 12
-    hdr.TextColor3 = T.Tx3
+    hdr.TextColor3 = T.Tx3; hdr:SetAttribute("ThemeColorRole_TextColor3", "Tx3"); pcall(function() hdr:SetAttribute("ThemeColorRole_TextColor3", "Tx3") end)
     hdr.TextXAlignment = Enum.TextXAlignment.Left
     hdr.Text = string.upper(title)
     return inner
@@ -882,7 +1782,7 @@ local function mkToggle(parent, label, default, callback, order)
     row.LayoutOrder = order
     row.Size = UDim2.new(1, 0, 0, 30)
     row.BackgroundTransparency = 1
-    row.BackgroundColor3 = T.Hover
+    row.BackgroundColor3 = T.Hover; pcall(function() row:SetAttribute("ThemeColorRole_BackgroundColor3", "Hover") end)
     row.Active = true
     row.BorderSizePixel = 0
     Corner(row, 6)
@@ -893,19 +1793,19 @@ local function mkToggle(parent, label, default, callback, order)
     lbl.Size = UDim2.new(1, -100, 1, 0)
     lbl.Font = F
     lbl.TextSize = 13
-    lbl.TextColor3 = T.Tx2
+    lbl.TextColor3 = T.Tx2; lbl:SetAttribute("ThemeColorRole_TextColor3", "Tx2"); pcall(function() lbl:SetAttribute("ThemeColorRole_TextColor3", "Tx2") end)
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.Text = label
     local badge = Instance.new("TextLabel")
     badge.Parent = row
     badge.BackgroundTransparency = 0
-    badge.BackgroundColor3 = T.Elev
+    badge.BackgroundColor3 = T.Elev; pcall(function() badge:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
     badge.AnchorPoint = Vector2.new(1, 0.5)
     badge.Position = UDim2.new(1, -52, 0.5, 0)
     badge.Size = UDim2.new(0, 0, 0, 18)
     badge.Font = FM
     badge.TextSize = 11
-    badge.TextColor3 = T.Tx2
+    badge.TextColor3 = T.Tx2; pcall(function() badge:SetAttribute("ThemeColorRole_TextColor3", "Tx2") end)
     badge.Text = ""
     badge.Visible = false
     badge.AutomaticSize = Enum.AutomaticSize.X
@@ -917,7 +1817,7 @@ local function mkToggle(parent, label, default, callback, order)
     track.AnchorPoint = Vector2.new(1, 0.5)
     track.Position = UDim2.new(1, -6, 0.5, 0)
     track.Size = UDim2.new(0, 40, 0, 20)
-    track.BackgroundColor3 = T.TgOff
+    track.BackgroundColor3 = T.TgOff; pcall(function() track:SetAttribute("ThemeColorRole_BackgroundColor3", "TgOff") end)
     track.BorderSizePixel = 0
     track.Text = ""
     track.AutoButtonColor = false
@@ -927,7 +1827,7 @@ local function mkToggle(parent, label, default, callback, order)
     knob.Parent = track
     knob.Size = UDim2.new(0, 14, 0, 14)
     knob.Position = UDim2.new(0, 3, 0.5, -7)
-    knob.BackgroundColor3 = T.KnobOff
+    knob.BackgroundColor3 = T.KnobOff; pcall(function() knob:SetAttribute("ThemeColorRole_BackgroundColor3", "KnobOff") end)
     knob.BorderSizePixel = 0
     Corner(knob, 7)
     local entry = { label = label, cfgId = _cfgId(parent, label), bindKey = nil, oldKey = nil, isToggle = true, state = default }
@@ -1007,11 +1907,11 @@ local function mkAction(parent, label, callback, order)
     btn.LayoutOrder = order
     btn.Size = UDim2.new(1, 0, 0, 32)
     btn.AutoButtonColor = false
-    btn.BackgroundColor3 = T.Elev
+    btn.BackgroundColor3 = T.Elev; pcall(function() btn:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
     btn.BorderSizePixel = 0
     btn.Font = FM
     btn.TextSize = 13
-    btn.TextColor3 = T.Tx
+    btn.TextColor3 = T.Tx; pcall(function() btn:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
     btn.Text = label
     Corner(btn, 7)
     local bst = Stroke(btn, T.Bd2, 1, 0.4)
@@ -1065,7 +1965,7 @@ local function mkSlider(parent, label, min, max, def, callback, order)
     lbl.Size = UDim2.new(0.6, 0, 0, 18)
     lbl.Font = F
     lbl.TextSize = 12
-    lbl.TextColor3 = T.Tx2
+    lbl.TextColor3 = T.Tx2; lbl:SetAttribute("ThemeColorRole_TextColor3", "Tx2"); pcall(function() lbl:SetAttribute("ThemeColorRole_TextColor3", "Tx2") end)
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.Text = label
     local vlbl = Instance.new("TextLabel")
@@ -1076,20 +1976,20 @@ local function mkSlider(parent, label, min, max, def, callback, order)
     vlbl.Size = UDim2.new(0.35, 0, 0, 18)
     vlbl.Font = FM
     vlbl.TextSize = 13
-    vlbl.TextColor3 = T.White
+    vlbl.TextColor3 = T.White; pcall(function() vlbl:SetAttribute("ThemeColorRole_TextColor3", "White") end)
     vlbl.TextXAlignment = Enum.TextXAlignment.Right
     local bar = Instance.new("Frame")
     bar.Parent = frame
     bar.AnchorPoint = Vector2.new(0.5, 0)
     bar.Position = UDim2.new(0.5, 0, 0, 24)
     bar.Size = UDim2.new(1, -12, 0, 5)
-    bar.BackgroundColor3 = T.TgOff
+    bar.BackgroundColor3 = T.TgOff; pcall(function() bar:SetAttribute("ThemeColorRole_BackgroundColor3", "TgOff") end)
     bar.BorderSizePixel = 0
     Corner(bar, 3)
     local fill = Instance.new("Frame")
     fill.Parent = bar
     fill.Size = UDim2.new(0, 0, 1, 0)
-    fill.BackgroundColor3 = T.White
+    fill.BackgroundColor3 = T.White; pcall(function() fill:SetAttribute("ThemeColorRole_BackgroundColor3", "White") end)
     fill.BorderSizePixel = 0
     Corner(fill, 3)
     local handle = Instance.new("Frame")
@@ -1097,7 +1997,7 @@ local function mkSlider(parent, label, min, max, def, callback, order)
     handle.AnchorPoint = Vector2.new(0.5, 0.5)
     handle.Position = UDim2.new(0, 0, 0.5, 0)
     handle.Size = UDim2.new(0, 13, 0, 13)
-    handle.BackgroundColor3 = T.White
+    handle.BackgroundColor3 = T.White; pcall(function() handle:SetAttribute("ThemeColorRole_BackgroundColor3", "White") end)
     handle.BorderSizePixel = 0
     Corner(handle, 7)
     Stroke(handle, T.BG, 2, 0)
@@ -1163,7 +2063,7 @@ local function mkCycle(parent, label, options, default, callback, order)
     lbl.Size = UDim2.new(1, -136, 1, 0)
     lbl.Font = F
     lbl.TextSize = 13
-    lbl.TextColor3 = T.Tx2
+    lbl.TextColor3 = T.Tx2; lbl:SetAttribute("ThemeColorRole_TextColor3", "Tx2"); pcall(function() lbl:SetAttribute("ThemeColorRole_TextColor3", "Tx2") end)
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.Text = label
     local btn = Instance.new("TextButton")
@@ -1171,12 +2071,12 @@ local function mkCycle(parent, label, options, default, callback, order)
     btn.AnchorPoint = Vector2.new(1, 0.5)
     btn.Position = UDim2.new(1, -6, 0.5, 0)
     btn.Size = UDim2.new(0, 120, 0, 22)
-    btn.BackgroundColor3 = T.Elev
+    btn.BackgroundColor3 = T.Elev; pcall(function() btn:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
     btn.BorderSizePixel = 0
     btn.AutoButtonColor = false
     btn.Font = FM
     btn.TextSize = 12
-    btn.TextColor3 = T.Tx
+    btn.TextColor3 = T.Tx; pcall(function() btn:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
     Corner(btn, 6)
     Stroke(btn, T.Bd2, 1, 0.4)
     local idx = 1
@@ -1394,7 +2294,7 @@ local function killAll()
         if not HandleTouched then Notify("Error","HandleTouched not found",3); return end
         local cnt = 0
         for _, v in pairs(Players:GetPlayers()) do
-            if v ~= LP and v.Character then
+            if v ~= LP and v.Character and not isWhitelisted(v) then
                 local primary = v.Character:FindFirstChild("HumanoidRootPart")
                 if not primary then continue end
                 pcall(function() HandleTouched:FireServer(primary) end)
@@ -1571,7 +2471,7 @@ end
 local function collectTargets(roleFilter)
     local out = {}
     for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LP and p.Character and roleMatches(p, roleFilter) then
+        if p ~= LP and p.Character and roleMatches(p, roleFilter) and not isWhitelisted(p) then
             local th = p.Character:FindFirstChildOfClass("Humanoid")
             if th and th.Health > 0 then table.insert(out, p) end
         end
@@ -1671,18 +2571,14 @@ local function ceilingTP()
     if hrp then hrp.CFrame = hrp.CFrame + Vector3.new(0, 250, 0); Notify("Teleport", "Up 250 studs", 2) end
 end
 do
-    local sec1 = mkSection(PVisuals, "Chams", 1)
+    local sec1 = mkSection(Pages.Visuals, "Chams", 1)
     mkToggle(sec1, "Murderer", false, function(v) S.MurderChams = v end, 1)
     mkToggle(sec1, "Sheriff", false, function(v) S.SheriffChams = v end, 2)
     mkToggle(sec1, "Hero", false, function(v) S.HeroChams = v end, 3)
     mkToggle(sec1, "Innocent", false, function(v) S.InnocentChams = v end, 4)
-    mkToggle(sec1, "Chams All", false, function(v) S.ChamsAll = v end, 5)
+    mkToggle(sec1, "Gun", false, function(v) S.GunHeldChams = v end, 5)
     mkSlider(sec1, "Chams Opacity", 0, 100, 50, function(v) S.ChamsOpacity = v end, 6)
-    mkToggle(sec1, "Visible Only (no wallhack)", false, function(v) S.ChamsVisibleCheck = v end, 7)
-    -- One toggle: everyone gets green where you can see them and dark-red where they're behind a
-    -- wall, so you instantly read who's peeking / hidden.
-    mkToggle(sec1, "Wall Detect", false, function(v) S.WallDetectChams = v end, 8)
-    local sec2 = mkSection(PVisuals, "Player ESP", 2)
+    local sec2 = mkSection(Pages.Visuals, "Player ESP", 2)
     mkToggle(sec2, "Name ESP", false, function(v) S.NameESP = v end, 1)
     mkToggle(sec2, "Distance ESP", false, function(v) S.DistanceESP = v end, 2)
     mkToggle(sec2, "Role ESP", false, function(v) S.RoleESP = v end, 3)
@@ -1694,10 +2590,9 @@ do
     mkToggle(sec2, "Head Dot", false, function(v) S.HeadDot = v end, 9)
     mkCycle(sec2, "Tracer Origin", {"Bottom", "Center", "Top", "Mouse"}, "Bottom", function(v) S.TracerOrigin = v end, 10)
     mkSlider(sec2, "ESP Max Dist", 100, 2000, 1000, function(v) S.ESPMaxDist = v end, 11)
-    local sec3 = mkSection(PVisuals, "Item ESP", 3)
+    local sec3 = mkSection(Pages.Visuals, "Item ESP", 3)
     mkToggle(sec3, "Gun Drop ESP", false, function(v) S.GunChams = v end, 1)
-    mkToggle(sec3, "Thrown Knife ESP", false, function(v) S.KnifeChams = v end, 2)
-    local sec4 = mkSection(PVisuals, "World", 4)
+    local sec4 = mkSection(Pages.Visuals, "World", 4)
     mkToggle(sec4, "Fullbright", false, function(v) S.FullBright = v end, 1)
     mkToggle(sec4, "No Fog", false, function(v) S.NoFog = v end, 2)
     mkToggle(sec4, "Force Day", false, function(v)
@@ -1708,26 +2603,25 @@ do
     end, 4)
     mkToggle(sec4, "No Shadows", false, function(v) S.NoShadows = v end, 5)
     mkSlider(sec4, "Brightness", 1, 5, 2, function(v) S.Brightness = v end, 6)
-    local secFx = mkSection(PVisuals, "Effects", 5)
+    local secFx = mkSection(Pages.Visuals, "Effects", 5)
     mkSlider(secFx, "Saturation", -100, 100, 0, function(v) S.Saturation = v end, 1)
     mkSlider(secFx, "Contrast", -100, 100, 0, function(v) S.Contrast = v end, 2)
     mkSlider(secFx, "Camera FOV", 40, 120, 70, function(v) S.CamFOV = v end, 3)
-    local secCrosshair = mkSection(PVisuals, "Custom Crosshair", 6)
+    local secCrosshair = mkSection(Pages.Visuals, "Custom Crosshair", 6)
     mkToggle(secCrosshair, "Enable Crosshair", false, function(v) S.Crosshair = v; rebuildCrosshair() end, 1)
-    mkToggle(secCrosshair, "Hide Real Cursor", false, function(v) S.HideRealCursor = v; rebuildCrosshair() end, 2)
-    mkCycle(secCrosshair, "Crosshair Shape", {"Cross", "X", "Dot", "Circle", "Heart"}, "Cross", function(v) S.CrosshairShape = v; rebuildCrosshair() end, 3)
-    mkCycle(secCrosshair, "Crosshair Color", {"Cyan", "Red", "Green", "Yellow", "Pink", "White", "Purple", "Orange", "Blue", "Rainbow"}, "Cyan", function(v) S.CrosshairColor = v; rebuildCrosshair() end, 4)
-    mkSlider(secCrosshair, "Crosshair Size", 4, 50, 12, function(v) S.CrosshairSize = v; rebuildCrosshair() end, 5)
-    mkSlider(secCrosshair, "Crosshair Thickness", 1, 8, 2, function(v) S.CrosshairThickness = v; rebuildCrosshair() end, 6)
-    mkSlider(secCrosshair, "Crosshair Gap", 0, 20, 4, function(v) S.CrosshairGap = v; rebuildCrosshair() end, 7)
-    mkSlider(secCrosshair, "Crosshair Rotation", 0, 360, 0, function(v) S.CrosshairRotation = v; rebuildCrosshair() end, 8)
+    mkCycle(secCrosshair, "Crosshair Shape", {"Cross", "X", "Dot", "Circle", "Heart"}, "Cross", function(v) S.CrosshairShape = v; rebuildCrosshair() end, 2)
+    mkCycle(secCrosshair, "Crosshair Color", {"Cyan", "Red", "Green", "Yellow", "Pink", "White", "Purple", "Orange", "Blue", "Rainbow"}, "Cyan", function(v) S.CrosshairColor = v; rebuildCrosshair() end, 3)
+    mkSlider(secCrosshair, "Crosshair Size", 4, 50, 12, function(v) S.CrosshairSize = v; rebuildCrosshair() end, 4)
+    mkSlider(secCrosshair, "Crosshair Thickness", 1, 8, 2, function(v) S.CrosshairThickness = v; rebuildCrosshair() end, 5)
+    mkSlider(secCrosshair, "Crosshair Gap", 0, 20, 4, function(v) S.CrosshairGap = v; rebuildCrosshair() end, 6)
+    mkSlider(secCrosshair, "Crosshair Rotation", 0, 360, 0, function(v) S.CrosshairRotation = v; rebuildCrosshair() end, 7)
 
-    local secSky = mkSection(PVisuals, "Sky", 7)
+    local secSky = mkSection(Pages.Visuals, "Sky", 7)
     mkToggle(secSky, "Custom Sky", false, function(v) S.SkyEnabled = v end, 1)
     mkCycle(secSky, "Sky Preset", {"Day", "Sunset", "Night", "Aurora", "Space", "Blood", "Toxic", "Ocean", "Sakura", "Midnight", "Storm", "Desert"}, "Day", function(v) S.SkyPreset = v end, 2)
     mkCycle(secSky, "Sky Color", {"Preset", "Blue", "Purple", "Pink", "Cyan", "Orange", "Green", "Red", "White"}, "Preset", function(v) S.SkyTint = v end, 3)
     mkToggle(secSky, "Rainbow Sky", false, function(v) S.SkyRainbow = v end, 4)
-    local secFog = mkSection(PVisuals, "Fog", 8)
+    local secFog = mkSection(Pages.Visuals, "Fog", 8)
     mkToggle(secFog, "Custom Fog", false, function(v) S.FogEnabled = v end, 1)
     -- Classic = sharp legacy fog (Start/End). Atmosphere = soft volumetric-style haze whose
     -- thickness comes from the Density slider (Start/End are ignored in that mode).
@@ -1737,7 +2631,7 @@ do
     mkSlider(secFog, "Fog End", 50, 5000, 500, function(v) S.FogEnd = v end, 5)
     mkSlider(secFog, "Fog Density", 5, 95, 40, function(v) S.FogDensity = v end, 6)
     mkToggle(secFog, "Rainbow Fog", false, function(v) S.FogRainbow = v end, 7)
-    local secFov = mkSection(PVisuals, "FOV", 9)
+    local secFov = mkSection(Pages.Visuals, "FOV", 9)
     mkToggle(secFov, "FOV Enabled", false, function(v) S.FOVEnabled = v end, 1)
     mkToggle(secFov, "Show FOV", false, function(v) S.ShowFOV = v end, 2)
     mkToggle(secFov, "Rainbow FOV", false, function(v) S.RainbowFOV = v end, 3)
@@ -1745,51 +2639,39 @@ do
     mkSlider(secFov, "FOV Thickness", 1, 8, 2, function(v) S.FOVThickness = v end, 5)
     mkCycle(secFov, "FOV Color", {"White", "Red", "Green", "Blue", "Yellow", "Cyan", "Purple", "Orange", "Pink", "Black"}, "White", function(v) S.FOVColor = v end, 6)
 
-    local sec5 = mkSection(PVisuals, "Alerts", 10)
+    local sec5 = mkSection(Pages.Visuals, "Alerts", 10)
     mkToggle(sec5, "Gun Drop Notify", false, function(v) S.GunNotify = v end, 1)
 end
+
 do
-    local sec1 = mkSection(PCombat, "Gun", 1)
+    local sec1 = mkSection(Pages.Combat, "Gun", 1)
     mkToggle(sec1, "Auto Grab Gun", false, function(v) S.AutoGrabGun = v end, 1)
     mkAction(sec1, "Grab Gun", function() grabGun() end, 2)
-    local sec2 = mkSection(PCombat, "Murderer", 2)
+    local sec2 = mkSection(Pages.Combat, "Murderer", 2)
     mkAction(sec2, "Kill All", function() killAll() end, 1)
     mkToggle(sec2, "Knife Aura", false, function(v) S.KnifeAura = v end, 3)
     mkSlider(sec2, "Aura Range", 5, 50, 15, function(v) S.KnifeAuraRange = v end, 4)
-    local sec3 = mkSection(PCombat, "Sheriff", 3)
-    mkToggle(sec3, "Piercing Bullet", false, function(v)
-        S.PiercingBullet = v
-        if v then
-            task.spawn(function()
-                pcall(function()
-                    loadstring(game:HttpGet("https://raw.githubusercontent.com/Lutosys/opensrc/refs/heads/main/mm2bulletTp"))()
-                end)
-            end)
-        end
-    end, 2)
-    -- Auto Gun (formerly its own "Auto Gun (Sheriff)" section) folded into Sheriff. The toggles only
-    -- flip S flags; the firing loops live in the auto-gun do-block below and read these flags.
-    mkToggle(sec3, "Auto Shoot Murderer", false, function(v) S.AutoShootMurder = v end, 3)
+    local sec3 = mkSection(Pages.Combat, "Sheriff", 3)
+    -- Trigger Bot's firing loop lives in the auto-gun do-block below and reads S.TriggerBot.
     mkToggle(sec3, "Trigger Bot", false, function(v) S.TriggerBot = v end, 4)
     -- Normal aim lock: enable, then (by default) HOLD Right Mouse to snap the camera onto the target.
     mkToggle(sec3, "Aim Lock", false, function(v) S.AimLock = v end, 5)
     mkCycle(sec3, "Aim Lock Target", {"Nearest", "Murderer", "Sheriff"}, "Nearest", function(v) S.AimLockTarget = v end, 6)
+    -- Aim Part = which body part Aim Lock actually aims at. Target PICK (who) still uses the
+    -- visible Head for the FOV circle; this only changes WHERE on that player the aim lands.
+    mkCycle(sec3, "Aim Part", {"Head", "Torso", "HumanoidRootPart"}, "Head", function(v) S.AimPart = v end, 7)
     -- Hold RMB ON = lock only while right mouse is held; OFF = lock continuously while Aim Lock is on.
-    mkToggle(sec3, "Aim Lock Hold RMB", true, function(v) S.AimLockHoldRMB = v end, 7)
+    mkToggle(sec3, "Aim Lock Hold RMB", true, function(v) S.AimLockHoldRMB = v end, 8)
     -- Smoothness 1 = instant snap; higher = the camera eases toward the target (Aim Lock only).
-    mkSlider(sec3, "Aim Smoothness", 1, 30, 1, function(v) S.AimSmooth = v end, 8)
-    -- Prediction leads a moving target by its velocity — helps both Aim Lock and Silent Aim. 0 = off.
-    mkSlider(sec3, "Aim Prediction", 0, 50, 0, function(v) S.AimPrediction = v end, 9)
-    -- Silent Aim: redirects the gun's bullet AND the murderer's thrown knife to the FOV target
-    -- (uses the same "Aim Lock Target" pick). This is what actually lands shots/knives — a hitbox
-    -- expander can't, because MM2 decides those hits from the position you SEND, not your hitboxes.
-    mkToggle(sec3, "Silent Aim", false, function(v) S.SilentAim = v end, 10)
-    local secDodge = mkSection(PCombat, "Knife Dodge", 5)
+    mkSlider(sec3, "Aim Smoothness", 1, 30, 1, function(v) S.AimSmooth = v end, 9)
+    -- Prediction leads a moving target by its velocity — helps Aim Lock. 0 = off.
+    mkSlider(sec3, "Aim Prediction", 0, 50, 0, function(v) S.AimPrediction = v end, 10)
+    local secDodge = mkSection(Pages.Combat, "Knife Dodge", 5)
     mkToggle(secDodge, "Auto Dodge Knife", false, function(v) S.AutoDodgeKnife = v end, 1)
     mkCycle(secDodge, "Dodge Mode", {"Teleport", "Walk Away", "Jump"}, "Teleport", function(v) S.AutoDodgeMode = v end, 2)
     mkSlider(secDodge, "Dodge Speed", 16, 100, 16, function(v) S.AutoDodgeSpeed = v end, 3)
 
-    local sec5 = mkSection(PCombat, "Fling", 6)
+    local sec5 = mkSection(Pages.Combat, "Fling", 6)
     mkAction(sec5, "Fling All", function() flingAll() end, 1)
     mkAction(sec5, "Fling Murder", function() flingByRole("Murderer") end, 2)
     mkAction(sec5, "Fling Sheriff", function() flingByRole("Sheriff") end, 3)
@@ -1838,14 +2720,6 @@ do
     end
     task.spawn(function()
         while S.Gui and S.Gui.Parent do
-            if S.AutoShootMurder and equippedGun() then
-                pcall(function() local h = murdererHRP(); if h then fireGunAt(h) end end)
-            end
-            task.wait(0.35)
-        end
-    end)
-    task.spawn(function()
-        while S.Gui and S.Gui.Parent do
             if S.TriggerBot and equippedGun() then
                 pcall(function()
                     local cam = workspace.CurrentCamera
@@ -1865,15 +2739,15 @@ do
             task.wait(0.15)
         end
     end)
-    -- (UI toggles for Auto Shoot Murderer / Trigger Bot now live in the "Sheriff" section above.)
+    -- (UI toggle for Trigger Bot lives in the "Sheriff" section above.)
 end
 do
     -- Normal aim lock: while the toggle is on, HOLD Right Mouse Button to snap the camera onto the
     -- selected target's head. It is FOV-based: among role-matched alive players it picks the one
     -- CLOSEST TO YOUR CROSSHAIR that is inside the FOV circle (S.FOVRadius px) — nothing outside the
     -- FOV is locked. Target mode filters who's eligible: Nearest (any role), Murderer, or Sheriff
-    -- (incl. the Hero holding the gun). NOTE: Aim Lock / Silent Aim deliberately IGNORE the Targets
-    -- tab pick (ManualTarget) — they always aim by FOV + mode, per request.
+    -- (incl. the Hero holding the gun). NOTE: Aim Lock deliberately IGNORES the Targets tab pick
+    -- (ManualTarget) — it always aims by FOV + mode, per request.
     local function aimTargetChar()
         local cam = workspace.CurrentCamera
         if not cam then return nil end
@@ -1887,7 +2761,7 @@ do
         local center = Vector2.new(m.X, m.Y)
         local best, bestScore = nil, math.huge
         for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= LP and p.Character then
+            if p ~= LP and p.Character and not isWhitelisted(p) then
                 local hum = p.Character:FindFirstChildOfClass("Humanoid")
                 local head = p.Character:FindFirstChild("Head") or p.Character:FindFirstChild("HumanoidRootPart")
                 if hum and head and hum.Health > 0 then
@@ -1908,166 +2782,38 @@ do
         end
         return best
     end
-    -- Both Aim Lock and Silent Aim share the same FOV target. We precompute the target position
-    -- ONCE per frame here (memory rule: never do namecalls / heavy math inside the __namecall hook);
-    -- silentPos is only set while a weapon is actually equipped so unrelated remotes are untouched.
-    local silentPos, silentCF = nil, nil
+    -- Aim Lock precomputes its FOV target once per frame and eases the camera onto the chosen body part.
     tc(RunService.RenderStepped:Connect(function()
         -- Hold RMB on -> lock only while right mouse is held; off -> lock whenever Aim Lock is on.
         local rmb = UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
         local locked = S.AimLock and (not S.AimLockHoldRMB or rmb)
-        if not (locked or S.SilentAim) then silentPos, silentCF = nil, nil; return end
+        if not locked then return end
         pcall(function()
             local ch = aimTargetChar()
-            if not ch then silentPos, silentCF = nil, nil; return end
-            local head = ch:FindFirstChild("Head") or ch:FindFirstChild("HumanoidRootPart")
-            if not head then silentPos, silentCF = nil, nil; return end
+            if not ch then return end
+            -- Aim Part: aim at the chosen body part (fall back to Head, then HRP, if it's missing).
+            local partName = S.AimPart or "Head"
+            local aimPart = ch:FindFirstChild(partName) or ch:FindFirstChild("Head") or ch:FindFirstChild("HumanoidRootPart")
+            if not aimPart then return end
             -- Prediction: lead a moving target by its own velocity (seconds ≈ slider / 100).
             local thrp = ch:FindFirstChild("HumanoidRootPart")
             local tvel = (thrp and thrp.AssemblyLinearVelocity) or Vector3.new()
-            local aimPos = head.Position + tvel * ((S.AimPrediction or 0) / 100)
-            -- Aim Lock: move the camera toward the target, eased by Smoothness (1 = instant snap).
-            if locked then
-                local cam = workspace.CurrentCamera
-                if cam then
-                    local goal = CFrame.lookAt(cam.CFrame.Position, aimPos)
-                    local sm = math.max(S.AimSmooth or 1, 1)
-                    cam.CFrame = (sm <= 1) and goal or cam.CFrame:Lerp(goal, math.clamp(1 / sm, 0, 1))
-                end
-            end
-            -- Silent Aim: stash the (predicted) target for the hook, only if a Gun/Revolver/Knife is out.
-            if S.SilentAim then
-                local c = LP.Character
-                local muzzle = c and (c:FindFirstChild("Head") or c:FindFirstChild("HumanoidRootPart"))
-                local weapon = c and (c:FindFirstChild("Gun") or c:FindFirstChild("Revolver") or c:FindFirstChild("Knife"))
-                if muzzle and weapon then
-                    silentPos = aimPos
-                    silentCF = CFrame.lookAt(muzzle.Position, aimPos)
-                else
-                    silentPos, silentCF = nil, nil
-                end
-            else
-                silentPos, silentCF = nil, nil
+            local aimPos = aimPart.Position + tvel * ((S.AimPrediction or 0) / 100)
+            -- Move the camera toward the target, eased by Smoothness (1 = instant snap).
+            local cam = workspace.CurrentCamera
+            if cam then
+                local goal = CFrame.lookAt(cam.CFrame.Position, aimPos)
+                local sm = math.max(S.AimSmooth or 1, 1)
+                cam.CFrame = (sm <= 1) and goal or cam.CFrame:Lerp(goal, math.clamp(1 / sm, 0, 1))
             end
         end)
     end))
-
-    -- Silent Aim hook: rewrite the FIRST CFrame (else first Vector3) argument of the gun-shot /
-    -- knife-throw remote to the target. MM2 reads that CFrame's POSITION as the hit point, so the
-    -- bullet/knife lands on the target (and ignores walls). Rewriting ONLY one arg is deliberate —
-    -- touching the extra args makes the server reject the shot. Executor-only (needs metamethod hook).
-    if hookmetamethod and getnamecallmethod and checkcaller and not _G.MM2_SilentHook then
-        _G.MM2_SilentHook = true
-        local oldNC
-        oldNC = hookmetamethod(game, "__namecall", function(self, ...)
-            if S.SilentAim and silentPos and not checkcaller() then
-                local ok, method = pcall(getnamecallmethod)
-                if ok and (method == "FireServer" or method == "InvokeServer") then
-                    local n = select("#", ...)
-                    local args = { ... }
-                    for i = 1, n do
-                        if typeof(args[i]) == "CFrame" then
-                            args[i] = silentCF or CFrame.new(silentPos)
-                            return oldNC(self, table.unpack(args, 1, n))
-                        end
-                    end
-                    for i = 1, n do
-                        if typeof(args[i]) == "Vector3" then
-                            args[i] = silentPos
-                            return oldNC(self, table.unpack(args, 1, n))
-                        end
-                    end
-                end
-            end
-            return oldNC(self, ...)
-        end)
-    end
 end
 do
-    -- Hitbox Expander: enlarge the chosen role's HumanoidRootPart so shots/knives land far more
-    -- easily. The HRP is kept invisible and non-collidable, and the original size is restored when
-    -- you turn it off (or the target no longer matches).
-    local sec = mkSection(PCombat, "Hitbox Expander", 9)
-    mkToggle(sec, "Hitbox Expander", false, function(v) S.HitboxExpand = v end, 1)
-    mkCycle(sec, "Hitbox Target", {"Murderer", "Sheriff", "All"}, "Murderer", function(v) S.HitboxTarget = v end, 2)
-    mkSlider(sec, "Hitbox Size", 4, 30, 10, function(v) S.HitboxSize = v end, 3)
-
-    task.spawn(function()
-        local original = {}
-        local function restoreAll()
-            for hrp, sz in pairs(original) do
-                if hrp and hrp.Parent then
-                    pcall(function()
-                        hrp.Size = sz
-                        hrp.Massless = false
-                    end)
-                end
-            end
-            original = {}
-        end
-        
-        local stepConn
-        while S.Gui and S.Gui.Parent do
-            if S.HitboxExpand then
-                if not stepConn then
-                    stepConn = RunService.Stepped:Connect(function()
-                        for hrp, _ in pairs(original) do
-                            if hrp and hrp.Parent then
-                                hrp.CanCollide = false
-                            end
-                        end
-                    end)
-                end
-                
-                pcall(function()
-                    local target = S.HitboxTarget or "Murderer"
-                    local sz = S.HitboxSize or 10
-                    local sv = Vector3.new(sz, sz, sz)
-                    for _, p in pairs(Players:GetPlayers()) do
-                        if p ~= LP and p.Character then
-                            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-                            if hrp then
-                                local r = getRole(p)
-                                local match = (target == "All")
-                                    or (target == "Murderer" and r == "Murderer")
-                                    or (target == "Sheriff" and (r == "Sheriff" or r == "Hero"))
-                                if match then
-                                    if not original[hrp] then original[hrp] = hrp.Size end
-                                    if hrp.Size ~= sv then
-                                        hrp.Size = sv
-                                        hrp.Massless = true
-                                    end
-                                    hrp.Transparency = 1
-                                    hrp.CanCollide = false
-                                elseif original[hrp] then
-                                    pcall(function()
-                                        hrp.Size = original[hrp]
-                                        hrp.Massless = false
-                                    end)
-                                    original[hrp] = nil
-                                end
-                            end
-                        end
-                    end
-                end)
-            elseif next(original) then
-                restoreAll()
-                if stepConn then
-                    stepConn:Disconnect()
-                    stepConn = nil
-                end
-            end
-            task.wait(0.2)
-        end
-        restoreAll()
-        if stepConn then stepConn:Disconnect() end
-    end)
-end
-do
-    local sec1 = mkSection(PMisc, "Player", 1)
+    local sec1 = mkSection(Pages.Motion, "Speed & Jump", 1)
     mkSlider(sec1, "WalkSpeed", 16, 100, 16, function(v) S.CustomWalkSpeed = v end, 1)
     mkSlider(sec1, "JumpPower", 50, 150, 50, function(v) S.CustomJumpPower = v end, 2)
-    local sec2 = mkSection(PMisc, "Movement", 2)
+    local sec2 = mkSection(Pages.Motion, "Movement", 2)
     mkToggle(sec2, "No Clip", false, function(v) S.NoClip = v end, 1)
     mkToggle(sec2, "Fly", false, function(v)
         S.Fly = v
@@ -2118,7 +2864,7 @@ do
         end))
     end)
 
-    local sec3 = mkSection(PMisc, "Camera", 3)
+    local sec3 = mkSection(Pages.Misc, "Camera", 3)
     mkToggle(sec3, "X-Ray Map", false, function(v) S.XrayOn = v
         for _, pt in pairs(workspace:GetDescendants()) do if pt:IsA("BasePart") and pt.Name ~= "Baseplate" then
             local pr = pt.Parent; if pr and not pr:FindFirstChild("Humanoid") then
@@ -2131,19 +2877,19 @@ do
         LP.DevCameraOcclusionMode = v and Enum.DevCameraOcclusionMode.Invisicam or Enum.DevCameraOcclusionMode.Zoom
     end, 2)
     mkToggle(sec3, "No Camera Limit", false, function(v) S.NoCamLimit = v
-        LP.CameraMaxZoomDistance = v and 100000 or 128
+        LP.CameraMaxZoomDistance = v and 100000 or _origMaxZoom
     end, 3)
-    local sec4 = mkSection(PMisc, "Protection", 4)
+    local sec4 = mkSection(Pages.Misc, "Protection", 4)
     mkToggle(sec4, "Anti-Fling", false, function(v) S.AntiFling = v end, 1)
     mkToggle(sec4, "Anti-Void", false, function(v) S.AntiVoid = v end, 2)
     mkToggle(sec4, "Anti-AFK", false, function(v) S.AntiAFK = v end, 3)
     mkToggle(sec4, "Auto Respawn", false, function(v) S.AutoRespawn = v end, 4)
     mkToggle(sec4, "Anti Ragdoll", false, function(v) S.AntiRagdoll = v end, 5)
-    local sec6 = mkSection(PMisc, "Performance", 5)
+    local sec6 = mkSection(Pages.Misc, "Performance", 5)
     mkToggle(sec6, "Anti Lag", false, function(v) S.AntiLag = v end, 1)
 
     -- ============ FOLLOW & ORBIT SECTION ============
-    local secFollow = mkSection(PMisc, "Follow & Orbit", 6)
+    local secFollow = mkSection(Pages.Misc, "Follow & Orbit", 6)
     
     -- Custom Target Player TextBox row
     local rowF = Instance.new("Frame")
@@ -2160,14 +2906,14 @@ do
     lblF.Size = UDim2.new(1, -12, 1, 0)
     lblF.Font = F
     lblF.TextSize = 12
-    lblF.TextColor3 = T.Tx4
+    lblF.TextColor3 = T.Tx4; pcall(function() lblF:SetAttribute("ThemeColorRole_TextColor3", "Tx4") end)
     lblF.TextWrapped = true
     lblF.TextXAlignment = Enum.TextXAlignment.Left
     lblF.Text = "Target is picked in the Targets tab (Auto = nearest)."
 
     mkToggle(secFollow, "Enable Follow/Orbit", false, function(v)
         S.FollowPlayer = v
-        if v and not S.ManualTarget then Notify("Follow", "No player picked in Targets tab - following nearest", 3) end
+        if v and not next(S.ManualTargets) then Notify("Follow", "No player picked in Targets tab - following nearest", 3) end
     end, 2)
     mkCycle(secFollow, "Follow Mode", {"Follow", "Orbit"}, "Follow", function(v) S.FollowPlayerMode = v end, 3)
     mkSlider(secFollow, "Follow Distance", 1, 30, 4, function(v) S.FollowPlayerDistance = v end, 4)
@@ -2184,22 +2930,19 @@ do
                     local hrp = c and c:FindFirstChild("HumanoidRootPart")
                     local hum = c and c:FindFirstChildOfClass("Humanoid")
                     if hrp and hum and hum.Health > 0 then
-                        -- Target comes from the Targets tab list; Auto = nearest alive player.
+                        -- Target from the Targets tab list (multi-select): nearest alive player among the
+                        -- picked set; empty set = nearest of everyone.
                         local target = nil
-                        if S.ManualTarget then
-                            for _, p in ipairs(Players:GetPlayers()) do
-                                if p ~= LP and p.Name == S.ManualTarget then target = p; break end
-                            end
-                        else
-                            local bestD
-                            for _, p in ipairs(Players:GetPlayers()) do
-                                if p ~= LP and p.Character then
-                                    local phrp = p.Character:FindFirstChild("HumanoidRootPart")
-                                    local ph = p.Character:FindFirstChildOfClass("Humanoid")
-                                    if phrp and ph and ph.Health > 0 then
-                                        local d = (phrp.Position - hrp.Position).Magnitude
-                                        if not bestD or d < bestD then bestD = d; target = p end
-                                    end
+                        local sel = S.ManualTargets
+                        local picking = next(sel) ~= nil
+                        local bestD
+                        for _, p in ipairs(Players:GetPlayers()) do
+                            if p ~= LP and p.Character and (not picking or sel[p.Name]) then
+                                local phrp = p.Character:FindFirstChild("HumanoidRootPart")
+                                local ph = p.Character:FindFirstChildOfClass("Humanoid")
+                                if phrp and ph and ph.Health > 0 then
+                                    local d = (phrp.Position - hrp.Position).Magnitude
+                                    if not bestD or d < bestD then bestD = d; target = p end
                                 end
                             end
                         end
@@ -2252,7 +2995,7 @@ do
         end
     end)
 
-    local sec5 = mkSection(PMisc, "Utility", 7)
+    local sec5 = mkSection(Pages.Misc, "Utility", 7)
     mkAction(sec5, "Reset Character", function() respawnChar() end, 1)
     mkAction(sec5, "Ceiling Teleport", function() ceilingTP() end, 2)
     mkAction(sec5, "Rejoin Server", function() rejoinServer() end, 3)
@@ -2273,7 +3016,7 @@ do
     lbl.Size = UDim2.new(0, 80, 1, 0)
     lbl.Font = F
     lbl.TextSize = 13
-    lbl.TextColor3 = T.Tx2
+    lbl.TextColor3 = T.Tx2; lbl:SetAttribute("ThemeColorRole_TextColor3", "Tx2"); pcall(function() lbl:SetAttribute("ThemeColorRole_TextColor3", "Tx2") end)
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.Text = "Goto Player:"
     
@@ -2281,11 +3024,11 @@ do
     box.Parent = row
     box.Position = UDim2.new(0, 90, 0.5, -10)
     box.Size = UDim2.new(1, -150, 0, 20)
-    box.BackgroundColor3 = T.Elev
+    box.BackgroundColor3 = T.Elev; pcall(function() box:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
     box.BorderSizePixel = 0
     box.Font = F
     box.TextSize = 12
-    box.TextColor3 = T.Tx
+    box.TextColor3 = T.Tx; pcall(function() box:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
     box.PlaceholderText = "Player name..."
     box.PlaceholderColor3 = T.Tx4
     box.Text = ""
@@ -2300,11 +3043,11 @@ do
     btn.AnchorPoint = Vector2.new(1, 0.5)
     btn.Position = UDim2.new(1, -6, 0.5, 0)
     btn.Size = UDim2.new(0, 48, 0, 20)
-    btn.BackgroundColor3 = T.Elev
+    btn.BackgroundColor3 = T.Elev; pcall(function() btn:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
     btn.BorderSizePixel = 0
     btn.Font = FM
     btn.TextSize = 12
-    btn.TextColor3 = T.Tx
+    btn.TextColor3 = T.Tx; pcall(function() btn:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
     btn.Text = "Go"
     btn.AutoButtonColor = false
     Corner(btn, 4)
@@ -2339,8 +3082,7 @@ do
             end
         end)
 
-    local secSocial = mkSection(PMisc, "Social & HUD", 8)
-    mkToggle(secSocial, "Custom Kill Feed", false, function(v) S.KillFeed = v end, 1)
+    local secSocial = mkSection(Pages.Misc, "Social & HUD", 8)
     mkToggle(secSocial, "Auto Say GG", false, function(v) S.AutoGG = v end, 2)
     mkToggle(secSocial, "Use Custom Phrase", false, function(v) S.UseCustomGG = v end, 3)
     
@@ -2358,7 +3100,7 @@ do
     lblGG.Size = UDim2.new(0, 110, 1, 0)
     lblGG.Font = F
     lblGG.TextSize = 13
-    lblGG.TextColor3 = T.Tx2
+    lblGG.TextColor3 = T.Tx2; pcall(function() lblGG:SetAttribute("ThemeColorRole_TextColor3", "Tx2") end)
     lblGG.TextXAlignment = Enum.TextXAlignment.Left
     lblGG.Text = "Custom GG Phrase:"
     
@@ -2366,11 +3108,11 @@ do
     boxGG.Parent = rowGG
     boxGG.Position = UDim2.new(0, 120, 0.5, -10)
     boxGG.Size = UDim2.new(1, -126, 0, 20)
-    boxGG.BackgroundColor3 = T.Elev
+    boxGG.BackgroundColor3 = T.Elev; pcall(function() boxGG:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
     boxGG.BorderSizePixel = 0
     boxGG.Font = F
     boxGG.TextSize = 12
-    boxGG.TextColor3 = T.Tx
+    boxGG.TextColor3 = T.Tx; pcall(function() boxGG:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
     boxGG.PlaceholderText = "GG!"
     boxGG.PlaceholderColor3 = T.Tx4
     boxGG.Text = S.CustomGGText or "GG!"
@@ -2382,9 +3124,110 @@ do
     boxGG:GetPropertyChangedSignal("Text"):Connect(function()
         S.CustomGGText = boxGG.Text
     end)
+
+    -- ===== Sound Mutes =====
+    -- MM2 doesn't give sounds tidy names, so each category matches by the Sound's name / SoundId and
+    -- the names of its parent objects (e.g. a "Fire" sound inside a "Gun" tool). Muting = force the
+    -- Volume to 0 while the toggle is on; the original volume is restored when you turn it back off.
+    -- If a sound slips through or the wrong one gets muted, tell me the sound's name and I'll retune
+    -- these keyword lists (or add its exact SoundId).
+    do
+        local muteWords = {
+            MuteGun        = { "gun", "revolver", "fire", "shoot", "shot", "bang", "pistol" },
+            MuteCoin       = { "coin", "pickup", "collect", "ding", "cash", "gem" },
+            MuteKill       = { "death", "die", "dead", "stab", "slash", "knife", "hit", "hurt", "ough", "splat", "kill", "blood",
+                               "gib", "corpse", "bodyfall", "body_fall", "thud", "squish", "impale", "scream", "grunt", "pain", "damage", "explo" },
+            MuteKillNotify = { "gameover", "game_over", "roundover", "results", "win", "victory", "lose", "defeat", "sheriffwin", "murdererwin" },
+        }
+        local muted = {}   -- [Sound] = original Volume (only while we've silenced it)
+        local function anyMuteOn() return S.MuteGun or S.MuteCoin or S.MuteKill or S.MuteKillNotify end
+        local function catFor(s)
+            local hay = s.Name .. " " .. tostring(s.SoundId)
+            local a = s.Parent
+            for _ = 1, 3 do if a then hay = hay .. " " .. a.Name; a = a.Parent end end
+            hay = hay:lower()
+            for cat, words in pairs(muteWords) do
+                if S[cat] then
+                    for _, w in ipairs(words) do if hay:find(w, 1, true) then return cat end end
+                end
+            end
+            return nil
+        end
+        local function applyMute(s)
+            if not s:IsA("Sound") then return end
+            if catFor(s) then
+                if muted[s] == nil then muted[s] = s.Volume end
+                s.Volume = 0
+            elseif muted[s] ~= nil then
+                pcall(function() s.Volume = muted[s] end); muted[s] = nil
+            end
+        end
+        -- Re-evaluate every existing sound (catch pre-existing ones on toggle-on; restore on toggle-off).
+        local function refreshMutes()
+            for _, r in ipairs({ workspace, SoundService, game:GetService("ReplicatedStorage") }) do
+                pcall(function()
+                    for _, v in ipairs(r:GetDescendants()) do if v:IsA("Sound") then applyMute(v) end end
+                end)
+            end
+            for s, vol in pairs(muted) do
+                if not s or not s.Parent or not catFor(s) then
+                    pcall(function() if s and s.Parent then s.Volume = vol end end); muted[s] = nil
+                end
+            end
+        end
+        -- Silence new sounds the moment they appear (and again when they start playing, in case the
+        -- game sets the volume right before Play()).
+        tc(game.DescendantAdded:Connect(function(v)
+            if v:IsA("Sound") and anyMuteOn() then
+                applyMute(v)
+                v.Played:Connect(function() if anyMuteOn() then applyMute(v) end end)
+            end
+        end))
+
+        local secSnd = mkSection(Pages.Misc, "Sound Mutes", 9)
+        mkToggle(secSnd, "Mute Gun Sound",     false, function(v) S.MuteGun = v;        refreshMutes() end, 1)
+        mkToggle(secSnd, "Mute Coin Sound",    false, function(v) S.MuteCoin = v;       refreshMutes() end, 2)
+        mkToggle(secSnd, "Mute Kill Sound",    false, function(v) S.MuteKill = v;       refreshMutes() end, 3)
+        mkToggle(secSnd, "Mute Kill Notify",   false, function(v) S.MuteKillNotify = v; refreshMutes() end, 4)
+    end
+
+    -- ===== Kill Effects (visual) =====
+    -- Strips the particle / trail / beam / smoke effects that spawn (and linger) when someone is
+    -- killed. New effects are disabled the instant they appear; existing ones are swept once when you
+    -- turn it on. Turning it off just stops enforcing (already-disabled emitters stay off until they
+    -- respawn). Broad by design — MM2 has little decorative particle ambiance to lose.
+    do
+        local FX_CLASSES = { ParticleEmitter = true, Trail = true, Beam = true, Smoke = true, Fire = true, Sparkles = true }
+        local function killFX(v)
+            if not S.HideKillFX then return end
+            if FX_CLASSES[v.ClassName] then
+                pcall(function() v.Enabled = false end)
+            elseif v:IsA("Explosion") then
+                pcall(function() v.Visible = false; v.BlastPressure = 0; v.BlastRadius = 0 end)
+            end
+        end
+        tc(workspace.DescendantAdded:Connect(function(v) if S.HideKillFX then killFX(v) end end))
+        local swept = false
+        task.spawn(function()
+            while S.Gui and S.Gui.Parent do
+                if S.HideKillFX then
+                    if not swept then
+                        swept = true
+                        pcall(function() for _, v in ipairs(workspace:GetDescendants()) do killFX(v) end end)
+                    end
+                else
+                    swept = false
+                end
+                task.wait(0.5)
+            end
+        end)
+
+        local secKE = mkSection(Pages.Misc, "Kill Effects", 10)
+        mkToggle(secKE, "Hide Kill Effects", false, function(v) S.HideKillFX = v end, 1)
+    end
 end
 do
-    local sec1 = mkSection(PTeleport, "Roles", 1)
+    local sec1 = mkSection(Pages.Teleport, "Roles", 1)
     mkAction(sec1, "Go to Murderer", function()
         for _, p in pairs(Players:GetPlayers()) do if p ~= LP and p.Character and getRole(p) == "Murderer" then
             local pr = p.Character:FindFirstChild("HumanoidRootPart"); if pr then
@@ -2399,7 +3242,7 @@ do
                     c.HumanoidRootPart.CFrame = pr.CFrame + Vector3.new(0,0,3); Notify("Moved","> "..p.Name,2) end; return end end end
         Notify("Notify","Sheriff not found",2)
     end, 2)
-    local sec2 = mkSection(PTeleport, "Location", 2)
+    local sec2 = mkSection(Pages.Teleport, "Location", 2)
     mkAction(sec2, "Go to Lobby", function()
         local lb = workspace:FindFirstChild("Lobby") or workspace:FindFirstChild("LobbySpawn")
         if lb then local sp = lb:FindFirstChildOfClass("SpawnLocation") or lb:FindFirstChildOfClass("BasePart")
@@ -2419,17 +3262,17 @@ do
         if far then c.HumanoidRootPart.CFrame = far.CFrame + Vector3.new(0,0,5); Notify("Moved","Map area",2) end
     end, 2)
     mkToggle(sec2, "Click TP (press E)", false, function(v) S.ClickTP = v end, 3)
-    local sec3 = mkSection(PTeleport, "Players", 3)
+    local sec3 = mkSection(Pages.Teleport, "Players", 3)
     local pScroll = Instance.new("ScrollingFrame")
     pScroll.Name = "PList"
     pScroll.Parent = sec3
     pScroll.LayoutOrder = 1
-    pScroll.BackgroundColor3 = T.Card
+    pScroll.BackgroundColor3 = T.Card; pcall(function() pScroll:SetAttribute("ThemeColorRole_BackgroundColor3", "Card") end)
     pScroll.BorderSizePixel = 0
     pScroll.Size = UDim2.new(1, 0, 0, 130)
     pScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
     pScroll.ScrollBarThickness = 3
-    pScroll.ScrollBarImageColor3 = T.Tx3
+    pScroll.ScrollBarImageColor3 = T.Tx3; pcall(function() pScroll:SetAttribute("ThemeColorRole_ScrollBarImageColor3", "Tx3") end)
     pScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
     Corner(pScroll, 8)
     Stroke(pScroll, T.Bd, 1, 0.4)
@@ -2447,8 +3290,8 @@ do
             b.BorderSizePixel = 0
             b.Font = F
             b.TextSize = 13
-            b.TextColor3 = T.Tx
-            b.BackgroundColor3 = T.Elev
+            b.TextColor3 = T.Tx; pcall(function() b:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
+            b.BackgroundColor3 = T.Elev; pcall(function() b:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
             b.Size = UDim2.new(1, 0, 0, 32)
             b.Text = "  " .. p.Name
             b.Parent = pScroll
@@ -2476,7 +3319,7 @@ end
 do
     -- Teleport utilities: waypoint (save/load a position) and a forward blink.
     local savedPos
-    local sec = mkSection(PTeleport, "Utility", 4)
+    local sec = mkSection(Pages.Teleport, "Utility", 4)
     mkAction(sec, "Save Position", function()
         local c = LP.Character; local hrp = c and c:FindFirstChild("HumanoidRootPart")
         if hrp then savedPos = hrp.CFrame; Notify("Teleport", "Position saved", 2)
@@ -2488,39 +3331,30 @@ do
         if hrp then hrp.CFrame = savedPos; Notify("Teleport", "Position loaded", 2)
         else Notify("Teleport", "No character", 2) end
     end, 2)
-    mkSlider(sec, "Blink Distance", 5, 100, 20, function(v) S.BlinkDist = v end, 3)
-    mkAction(sec, "Blink Forward", function()
-        local c = LP.Character; local hrp = c and c:FindFirstChild("HumanoidRootPart")
-        local cam = workspace.CurrentCamera
-        if hrp and cam then
-            hrp.CFrame = hrp.CFrame + cam.CFrame.LookVector * (S.BlinkDist or 20)
-            Notify("Teleport", "Blinked", 1.5)
-        end
-    end, 4)
 end
 -- ============ TARGETS TAB (pick one player for Fun functions) ============
 do
-    local sec1 = mkSection(PTargets, "Manual Target", 1)
+    local sec1 = mkSection(Pages.Targets, "Manual Target", 1)
     local info = Instance.new("TextLabel")
     info.Parent = sec1
     info.LayoutOrder = 1
     info.BackgroundTransparency = 1
-    info.Size = UDim2.new(1, 0, 0, 34)
+    info.Size = UDim2.new(1, 0, 0, 52)
     info.Font = F
     info.TextSize = 12
-    info.TextColor3 = T.Tx4
+    info.TextColor3 = T.Tx4; pcall(function() info:SetAttribute("ThemeColorRole_TextColor3", "Tx4") end)
     info.TextWrapped = true
     info.TextXAlignment = Enum.TextXAlignment.Left
-    info.Text = "THE target selector: the player picked here is used by Fun (Orbit/Bang/Head Sit) and Follow/Orbit. (Aim Lock / Silent Aim ignore this and use their own FOV + target mode.)"
+    info.Text = "Left-click = select targets (multi — pick several; Fun & Follow use the NEAREST selected). 'Auto' clears the selection = nearest of all. Right-click = Whitelist (green WL): that player is SKIPPED by Fling, Kill All, Knife Aura and Aim Lock."
     local searchBox = Instance.new("TextBox")
     searchBox.Parent = sec1
     searchBox.LayoutOrder = 2
     searchBox.Size = UDim2.new(1, 0, 0, 30)
-    searchBox.BackgroundColor3 = T.Elev
+    searchBox.BackgroundColor3 = T.Elev; pcall(function() searchBox:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
     searchBox.BorderSizePixel = 0
     searchBox.Font = F
     searchBox.TextSize = 13
-    searchBox.TextColor3 = T.Tx
+    searchBox.TextColor3 = T.Tx; pcall(function() searchBox:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
     searchBox.PlaceholderText = "Search player..."
     searchBox.PlaceholderColor3 = T.Tx4
     searchBox.Text = ""
@@ -2532,12 +3366,12 @@ do
     local tScroll = Instance.new("ScrollingFrame")
     tScroll.Parent = sec1
     tScroll.LayoutOrder = 3
-    tScroll.BackgroundColor3 = T.Card
+    tScroll.BackgroundColor3 = T.Card; pcall(function() tScroll:SetAttribute("ThemeColorRole_BackgroundColor3", "Card") end)
     tScroll.BorderSizePixel = 0
     tScroll.Size = UDim2.new(1, 0, 0, 220)
     tScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
     tScroll.ScrollBarThickness = 3
-    tScroll.ScrollBarImageColor3 = T.Tx3
+    tScroll.ScrollBarImageColor3 = T.Tx3; pcall(function() tScroll:SetAttribute("ThemeColorRole_ScrollBarImageColor3", "Tx3") end)
     tScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
     Corner(tScroll, 8)
     Stroke(tScroll, T.Bd, 1, 0.4)
@@ -2561,29 +3395,71 @@ do
             b.BorderSizePixel = 0
             b.Font = F
             b.TextSize = 13
-            b.TextColor3 = T.Tx
-            b.BackgroundColor3 = T.Elev
+            b.TextColor3 = T.Tx; pcall(function() b:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
+            b.BackgroundColor3 = T.Elev; pcall(function() b:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
             b.Size = UDim2.new(1, 0, 0, 32)
             b.Text = "  " .. labelText
             b.TextXAlignment = Enum.TextXAlignment.Left
             b.Parent = tScroll
             Corner(b, 6)
-            local function isSelected() return S.ManualTarget == plrName end
+            -- "WL" tag on the right, shown when this player is whitelisted (protected / skipped).
+            local wl = Instance.new("TextLabel")
+            wl.Name = "WLTag"
+            wl.Parent = b
+            wl.AnchorPoint = Vector2.new(1, 0.5)
+            wl.Position = UDim2.new(1, -8, 0.5, 0)
+            wl.Size = UDim2.new(0, 30, 0, 16)
+            wl.BackgroundTransparency = 1
+            wl.Font = FB
+            wl.TextSize = 11
+            wl.TextColor3 = Color3.fromRGB(90, 220, 120)
+            wl.TextXAlignment = Enum.TextXAlignment.Right
+            wl.Text = "WL"
+            wl.Visible = false
+            -- Multi-select: a player row is "selected" if it's in the ManualTargets set; the Auto row
+            -- is "selected" when the set is empty.
+            local function isSelected()
+                if plrName == nil then return not next(S.ManualTargets) end
+                return S.ManualTargets[plrName] == true
+            end
+            local function isWL() return plrName ~= nil and S.Whitelist[plrName] == true end
             local function refreshVis()
-                b.BackgroundColor3 = isSelected() and T.ActiveBg or T.Elev
-                b.TextColor3 = isSelected() and T.White or T.Tx
+                if isSelected() then
+                    b.BackgroundColor3 = T.ActiveBg; pcall(function() b:SetAttribute("ThemeColorRole_BackgroundColor3", "ActiveBg") end); b.TextColor3 = T.White; pcall(function() b:SetAttribute("ThemeColorRole_TextColor3", "White") end)
+                elseif isWL() then
+                    b.BackgroundColor3 = Color3.fromRGB(26, 44, 32); b.TextColor3 = T.Tx; pcall(function() b:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
+                else
+                    b.BackgroundColor3 = T.Elev; pcall(function() b:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end); b.TextColor3 = T.Tx; pcall(function() b:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
+                end
+                wl.Visible = isWL()
             end
             refreshVis()
             b.MouseEnter:Connect(function()
-                if not isSelected() then TweenService:Create(b, TweenInfo.new(0.1), { BackgroundColor3 = T.Hover }):Play() end
+                -- Only plain rows get the hover tint; selected (blue) and whitelisted (green) rows keep
+                -- their colour so it doesn't flicker away on hover.
+                if not isSelected() and not isWL() then TweenService:Create(b, TweenInfo.new(0.1), { BackgroundColor3 = T.Hover }):Play() end
             end)
             b.MouseLeave:Connect(function() refreshVis() end)
             b.MouseButton1Click:Connect(function()
                 SFX.Click()
-                S.ManualTarget = plrName
-                Notify("Target", plrName and ("Selected: " .. plrName) or "Auto (nearest)", 2)
+                if plrName == nil then
+                    S.ManualTargets = {}   -- Auto row: clear all selections
+                    Notify("Target", "Auto (nearest)", 2)
+                else
+                    if S.ManualTargets[plrName] then S.ManualTargets[plrName] = nil else S.ManualTargets[plrName] = true end
+                    Notify("Target", (S.ManualTargets[plrName] and "Added: " or "Removed: ") .. plrName, 2)
+                end
                 for _, r in ipairs(rowRefreshers) do r() end
             end)
+            -- Right-click toggles the whitelist for this player (not the Auto row).
+            if plrName then
+                b.MouseButton2Click:Connect(function()
+                    SFX.Click()
+                    if S.Whitelist[plrName] then S.Whitelist[plrName] = nil else S.Whitelist[plrName] = true end
+                    Notify("Whitelist", (S.Whitelist[plrName] and "Protected (skipped): " or "Removed: ") .. plrName, 2)
+                    for _, r in ipairs(rowRefreshers) do r() end
+                end)
+            end
             table.insert(rowRefreshers, refreshVis)
         end
         mkRow("Auto (role / nearest)", nil)
@@ -2600,14 +3476,22 @@ do
     end)
     tc(Players.PlayerAdded:Connect(function() task.wait(1); refreshTargets() end))
     tc(Players.PlayerRemoving:Connect(function(p)
-        if S.ManualTarget == p.Name then S.ManualTarget = nil end
+        if S.ManualTargets then S.ManualTargets[p.Name] = nil end
+        if S.Whitelist then S.Whitelist[p.Name] = nil end
         task.wait(0.5); refreshTargets()
     end))
     table.insert(ConfigControls, {
-        id = "Targets/Manual/ManualTarget",
-        get = function() return S.ManualTarget end,
+        id = "Targets/Manual/ManualTargets",
+        get = function()
+            local list = {}
+            for n in pairs(S.ManualTargets) do list[#list + 1] = n end
+            return list
+        end,
         set = function(v)
-            S.ManualTarget = (type(v) == "string" and v ~= "") and v or nil
+            S.ManualTargets = {}
+            if type(v) == "table" then
+                for _, n in ipairs(v) do if type(n) == "string" then S.ManualTargets[n] = true end end
+            end
             refreshTargets()
         end,
     })
@@ -2630,24 +3514,17 @@ end
 -- Pick a target player: the pick from the Targets tab list wins (the ONLY manual selector);
 -- with "Auto" selected we fall back to the nearest alive player.
 local function funTarget()
-    if S.ManualTarget then
-        for _, p in pairs(Players:GetPlayers()) do
-            if p.Name == S.ManualTarget and p ~= LP and p.Character then
-                local h = p.Character:FindFirstChildOfClass("Humanoid")
-                if h and h.Health > 0 then return p end
-            end
-        end
-        return nil -- a specific player was picked but isn't valid right now: don't guess
-    end
+    -- Multi-select: pick the NEAREST alive player among the picked set. Empty set = Auto (nearest of all).
     local myRoot = getRoot(LP.Character)
-    if not myRoot then return nil end
+    local sel = S.ManualTargets
+    local picking = next(sel) ~= nil
     local best, bestD
     for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LP and p.Character then
+        if p ~= LP and p.Character and (not picking or sel[p.Name]) then
             local r = getRoot(p.Character)
             local h = p.Character:FindFirstChildOfClass("Humanoid")
             if r and h and h.Health > 0 then
-                local d = (r.Position - myRoot.Position).Magnitude
+                local d = myRoot and (r.Position - myRoot.Position).Magnitude or 0
                 if not bestD or d < bestD then bestD = d; best = p end
             end
         end
@@ -2655,34 +3532,32 @@ local function funTarget()
     return best
 end
 -- Swim
-local swimBeat, swimGrav
+local swimBeat
 local function startSwim()
-    local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+    local c = LP.Character
+    local hum = c and c:FindFirstChildOfClass("Humanoid")
     if not hum then return end
-    swimGrav = workspace.Gravity
-    workspace.Gravity = 0
-    for _, v in pairs(Enum.HumanoidStateType:GetEnumItems()) do
-        if v ~= Enum.HumanoidStateType.None then pcall(function() hum:SetStateEnabled(v, false) end) end
-    end
-    hum:ChangeState(Enum.HumanoidStateType.Swimming)
+    -- Float/swim by cancelling gravity on OUR OWN HumanoidRootPart each frame. We deliberately do NOT
+    -- force the Humanoid's Swimming state and do NOT touch workspace.Gravity — forcing the Swimming
+    -- state is what made MM2's own PartSwim.SwimController run every frame with no water and spam
+    -- "Position is not a valid member of Model" errors. This way there's zero spam.
+    if swimBeat then swimBeat:Disconnect() end
     swimBeat = RunService.Heartbeat:Connect(function()
         pcall(function()
             local root = getRoot(LP.Character)
-            if root then
-                root.Velocity = ((hum.MoveDirection ~= Vector3.new() or UIS:IsKeyDown(Enum.KeyCode.Space)) and root.Velocity or Vector3.new())
+            local h = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+            if root and h then
+                local vy = 0
+                if UIS:IsKeyDown(Enum.KeyCode.Space) then vy = 26
+                elseif UIS:IsKeyDown(Enum.KeyCode.LeftShift) then vy = -26 end
+                local md = h.MoveDirection
+                root.AssemblyLinearVelocity = Vector3.new(md.X * 22, vy, md.Z * 22)
             end
         end)
     end)
 end
 local function stopSwim()
-    if swimGrav then workspace.Gravity = swimGrav end
     if swimBeat then swimBeat:Disconnect(); swimBeat = nil end
-    local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
-    if hum then
-        for _, v in pairs(Enum.HumanoidStateType:GetEnumItems()) do
-            if v ~= Enum.HumanoidStateType.None then pcall(function() hum:SetStateEnabled(v, true) end) end
-        end
-    end
 end
 -- Wall TP
 local walltpConn
@@ -2864,82 +3739,164 @@ local function doWallWalk()
         Notify("Wall Walk", ok and "Loaded" or "Failed to load", 3)
     end)
 end
--- Invisible (FE) - clones character and swaps, appears invisible to others
-local invisRunning = false
-local invisRespawn = nil
-local function startInvisibleFE()
-    if invisRunning then return end
-    invisRunning = true
-    local ok = pcall(function()
-        local Player = LP
-        local Character = Player.Character
-        if not Character then invisRunning = false; return end
-        Character.Archivable = true
-        local Lighting2 = game:GetService("Lighting")
-        local InvisibleCharacter = Character:Clone()
-        InvisibleCharacter.Parent = Lighting2
-        InvisibleCharacter.Name = ""
-        local Void = workspace.FallenPartsDestroyHeight
-        local invisFix, invisDied
-        local function Respawn()
-            pcall(function()
-                -- Reappear at the invisible clone's current spot (not falling from the void),
-                -- swap control back to the REAL character and keep its Humanoid intact so it is
-                -- visible and controllable again. Destroying the real Humanoid here was the old
-                -- bug that left you stuck / never reappearing.
-                local cf
-                if InvisibleCharacter and InvisibleCharacter:FindFirstChild("HumanoidRootPart") then
-                    cf = InvisibleCharacter.HumanoidRootPart.CFrame
-                end
-                Player.Character = Character
-                Character.Parent = workspace
-                if cf and Character:FindFirstChild("HumanoidRootPart") then
-                    Character.HumanoidRootPart.CFrame = cf
-                end
-                local rhum = Character:FindFirstChildOfClass("Humanoid")
-                pcall(function() workspace.CurrentCamera.CameraSubject = rhum end)
-                pcall(function() Character.Animate.Disabled = true; Character.Animate.Disabled = false end)
-                if InvisibleCharacter then InvisibleCharacter:Destroy() end
-            end)
-            invisRunning = false
-            if invisFix then invisFix:Disconnect() end
-            if invisDied then invisDied:Disconnect() end
+-- Invisible (FE): REAL invisibility — swaps control to a client-side CLONE while your real body freezes
+-- on the server, so OTHER players stop seeing your movement. You CANNOT shoot/stab while it's on (the
+-- server tracks your frozen body); it's for hiding / escaping — turn it off to fight. Crash-proof:
+-- toggling off / dying / falling in the void ALWAYS hands back a real, controllable character, and if
+-- the swap-back ever fails it force-respawns you, so you can't get stranded. Wrapped in a do-block so
+-- only the two toggle functions are top-level locals (stays under the 200-local limit).
+local startInvisibleFE, stopInvisibleFE, toggleInvisible, toggleBlink
+do
+    local running = false
+    local conns = {}
+    local realChar, cloneChar = nil, nil
+    local function cleanup()
+        for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
+        conns = {}
+    end
+    stopInvisibleFE = function()
+        if not running then return end
+        running = false
+        cleanup()
+        if toggleInvisible and toggleInvisible.state then
+            pcall(function() toggleInvisible.trigger() end)
         end
-        invisRespawn = Respawn
-        invisFix = RunService.Stepped:Connect(function()
-            pcall(function()
-                local root = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-                if root then
-                    local Y = root.Position.Y
-                    if Void < 0 then if Y <= Void then Respawn() end else if Y >= Void then Respawn() end end
-                end
-            end)
+        local ok = pcall(function()
+            local real, clone = realChar, cloneChar
+            local cf
+            if clone and clone:FindFirstChild("HumanoidRootPart") then cf = clone.HumanoidRootPart.CFrame end
+            if real and real:FindFirstChildOfClass("Humanoid") and real:FindFirstChild("HumanoidRootPart") then
+                real.Parent = workspace
+                if cf then real.HumanoidRootPart.CFrame = cf end
+                LP.Character = real
+                pcall(function() workspace.CurrentCamera.CameraSubject = real:FindFirstChildOfClass("Humanoid") end)
+                pcall(function() real.Animate.Disabled = true; real.Animate.Disabled = false end)
+                if clone then clone:Destroy() end
+            else
+                if clone then pcall(function() clone:Destroy() end) end
+                pcall(function() LP:LoadCharacter() end)
+            end
         end)
-        for _, v in pairs(InvisibleCharacter:GetDescendants()) do
-            if v:IsA("BasePart") then v.Transparency = (v.Name == "HumanoidRootPart") and 1 or 0.5 end
+        realChar, cloneChar = nil, nil
+        if not ok then pcall(function() LP:LoadCharacter() end) end
+        Notify("Invisible", "You are visible again", 3)
+    end
+    startInvisibleFE = function()
+        if running then return end
+        if toggleBlink and toggleBlink.state then toggleBlink.trigger() end
+        local char = LP.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not (char and hrp and hum) then Notify("Invisible", "No character", 3); return end
+        running = true
+        local ok = pcall(function()
+            char.Archivable = true
+            local cf = hrp.CFrame
+            local clone = char:Clone()
+            clone.Parent = workspace
+            if clone:FindFirstChild("HumanoidRootPart") then clone.HumanoidRootPart.CFrame = cf end
+            for _, p in ipairs(clone:GetDescendants()) do
+                if p:IsA("BasePart") then p.Transparency = (p.Name == "HumanoidRootPart") and 1 or 0.6 end
+            end
+            LP.Character = clone
+            pcall(function() workspace.CurrentCamera.CameraSubject = clone:FindFirstChildOfClass("Humanoid") end)
+            pcall(function() clone.Animate.Disabled = true; clone.Animate.Disabled = false end)
+            char.Parent = game:GetService("Lighting")
+            realChar, cloneChar = char, clone
+            local ch = clone:FindFirstChildOfClass("Humanoid")
+            if ch then table.insert(conns, ch.Died:Connect(function() stopInvisibleFE() end)) end
+            local Void = workspace.FallenPartsDestroyHeight
+            table.insert(conns, RunService.Stepped:Connect(function()
+                local r = cloneChar and cloneChar:FindFirstChild("HumanoidRootPart")
+                if r and r.Position.Y <= Void + 5 then stopInvisibleFE() end
+            end))
+        end)
+        if not ok then
+            running = false
+            cleanup()
+            realChar, cloneChar = nil, nil
+            pcall(function() LP:LoadCharacter() end)
+            Notify("Invisible", "Failed (game blocks it)", 3)
+        else
+            Notify("Invisible", "Invisible to others — you CAN'T shoot while on (for hiding)", 4)
         end
-        local ihum = InvisibleCharacter:FindFirstChildOfClass("Humanoid")
-        if ihum then invisDied = ihum.Died:Connect(function() Respawn() end) end
-        local CF_1 = Character:FindFirstChild("HumanoidRootPart") and Character.HumanoidRootPart.CFrame
-        Character:MoveTo(Vector3.new(0, math.pi * 1000000, 0))
-        workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
-        task.wait(0.2)
-        workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
-        Character.Parent = Lighting2
-        InvisibleCharacter.Parent = workspace
-        if CF_1 and InvisibleCharacter:FindFirstChild("HumanoidRootPart") then
-            InvisibleCharacter.HumanoidRootPart.CFrame = CF_1
-        end
-        Player.Character = InvisibleCharacter
-        pcall(function() workspace.CurrentCamera.CameraSubject = ihum end)
-        pcall(function() InvisibleCharacter.Animate.Disabled = true; InvisibleCharacter.Animate.Disabled = false end)
-        Notify("Invisible", "You appear invisible to other players", 3)
-    end)
-    if not ok then invisRunning = false; Notify("Invisible", "Failed (game blocks it)", 3) end
+    end
 end
-local function stopInvisibleFE()
-    if invisRespawn then pcall(invisRespawn); invisRespawn = nil end
-    invisRunning = false
+-- Blink: lag switch clone teleport
+local startBlink, stopBlink
+do
+    local running = false
+    local conns = {}
+    local realChar, cloneChar = nil, nil
+    local function cleanup()
+        for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
+        conns = {}
+    end
+    stopBlink = function()
+        if not running then return end
+        running = false
+        cleanup()
+        if toggleBlink and toggleBlink.state then
+            pcall(function() toggleBlink.trigger() end)
+        end
+        local ok = pcall(function()
+            local real, clone = realChar, cloneChar
+            local cf
+            if clone and clone:FindFirstChild("HumanoidRootPart") then cf = clone.HumanoidRootPart.CFrame end
+            if real and real:FindFirstChildOfClass("Humanoid") and real:FindFirstChild("HumanoidRootPart") then
+                real.Parent = workspace
+                if cf then real.HumanoidRootPart.CFrame = cf end
+                LP.Character = real
+                pcall(function() workspace.CurrentCamera.CameraSubject = real:FindFirstChildOfClass("Humanoid") end)
+                pcall(function() real.Animate.Disabled = true; real.Animate.Disabled = false end)
+                if clone then clone:Destroy() end
+            else
+                if clone then pcall(function() clone:Destroy() end) end
+                pcall(function() LP:LoadCharacter() end)
+            end
+        end)
+        realChar, cloneChar = nil, nil
+        if not ok then pcall(function() LP:LoadCharacter() end) end
+        Notify("Blink", "Blink deactivated", 3)
+    end
+    startBlink = function()
+        if running then return end
+        if toggleInvisible and toggleInvisible.state then toggleInvisible.trigger() end
+        local char = LP.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not (char and hrp and hum) then Notify("Blink", "No character", 3); return end
+        running = true
+        local ok = pcall(function()
+            char.Archivable = true
+            local cf = hrp.CFrame
+            local clone = char:Clone()
+            clone.Parent = workspace
+            if clone:FindFirstChild("HumanoidRootPart") then clone.HumanoidRootPart.CFrame = cf end
+
+            LP.Character = clone
+            pcall(function() workspace.CurrentCamera.CameraSubject = clone:FindFirstChildOfClass("Humanoid") end)
+            pcall(function() clone.Animate.Disabled = true; clone.Animate.Disabled = false end)
+            char.Parent = game:GetService("Lighting")
+            realChar, cloneChar = char, clone
+            local ch = clone:FindFirstChildOfClass("Humanoid")
+            if ch then table.insert(conns, ch.Died:Connect(function() stopBlink() end)) end
+            local Void = workspace.FallenPartsDestroyHeight
+            table.insert(conns, RunService.Stepped:Connect(function()
+                local r = cloneChar and cloneChar:FindFirstChild("HumanoidRootPart")
+                if r and r.Position.Y <= Void + 5 then stopBlink() end
+            end))
+        end)
+        if not ok then
+            running = false
+            cleanup()
+            realChar, cloneChar = nil, nil
+            pcall(function() LP:LoadCharacter() end)
+            Notify("Blink", "Failed to activate Blink", 3)
+        else
+            Notify("Blink", "Blink active — move to teleport", 4)
+        end
+    end
 end
 -- Free Cam (adapted from Infinite Yield)
 local startFreecam, stopFreecam
@@ -3061,30 +4018,49 @@ do
     end
 end
 do
-    local secM = mkSection(PFun, "Movement", 2)
+    local secM = mkSection(Pages.Motion, "Movement Tricks", 3)
     mkToggle(secM, "Swim", false, function(v) S.Swim = v; if v then startSwim() else stopSwim() end end, 1)
     mkToggle(secM, "Wall TP", false, function(v) S.WallTP = v; if v then startWallTP() else stopWallTP() end end, 2)
     mkAction(secM, "Wall Walk", function() doWallWalk() end, 3)
     mkAction(secM, "Trip", function() doTrip() end, 4)
     mkAction(secM, "Fake Out (Flinger Kill)", function() doFakeOut() end, 5)
-    local secTr = mkSection(PFun, "Troll", 3)
+    local secTr = mkSection(Pages.Fun, "Troll", 3)
     mkToggle(secTr, "Spinbot", false, function(v) S.Spinbot = v end, 1)
     mkSlider(secTr, "Spin Speed", 5, 1000, 20, function(v) S.SpinSpeed = v end, 2)
     mkToggle(secTr, "Jerk", false, function(v) S.Jerk = v; if v then startJerk() else stopJerk() end end, 3)
-    local secC = mkSection(PFun, "Camera & Body", 4)
+    mkToggle(secTr, "Click Fling", false, function(v) S.ClickFling = v end, 4)
+    local secC = mkSection(Pages.Fun, "Camera & Body", 4)
     mkToggle(secC, "Free Cam", false, function(v) S.FreeCam = v; if v then startFreecam() else stopFreecam() end end, 1)
-    mkToggle(secC, "Invisible (FE)", false, function(v) S.InvisibleFE = v; if v then startInvisibleFE() else stopInvisibleFE() end end, 2)
+    toggleInvisible = mkToggle(secC, "Invisible (FE)", false, function(v) S.InvisibleFE = v; if v then startInvisibleFE() else stopInvisibleFE() end end, 2)
+    toggleBlink = mkToggle(secC, "Blink", false, function(v) S.Blink = v; if v then startBlink() else stopBlink() end end, 3)
 
     -- ---- Target Actions live on the TARGETS tab (built here so they can reuse the Fun module's
     -- start/stop helpers + funTarget/skidFling). They all act on the player picked in the Targets
     -- list; with "Auto" selected that resolves to the nearest player.
     local function currentTarget() return funTarget() end
-    local secTgt = mkSection(PTargets, "Target Actions", 2)
+    local secTgt = mkSection(Pages.Targets, "Target Actions", 2)
+    -- Flings EVERY player selected in the Targets list (multi-select), skipping whitelisted ones.
     mkAction(secTgt, "Fling Target", function()
-        local t = currentTarget()
-        if not t or not t.Character then Notify("Fling", "No valid target", 2); return end
-        Notify("Fling", "Flinging " .. t.Name, 2)
-        task.spawn(function() pcall(skidFling, t) end)
+        task.spawn(function()
+            local c = LP.Character
+            local hrp = c and c:FindFirstChild("HumanoidRootPart")
+            if not hrp then Notify("Fling Target", "No character", 3); return end
+            local targets = {}
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= LP and p.Character and S.ManualTargets[p.Name] and not isWhitelisted(p) then
+                    local th = p.Character:FindFirstChildOfClass("Humanoid")
+                    if th and th.Health > 0 then table.insert(targets, p) end
+                end
+            end
+            if #targets == 0 then Notify("Fling Target", "No targets selected (pick players in the Targets tab)", 3); return end
+            local flung = 0
+            for _, p in ipairs(targets) do
+                local ok, res = pcall(skidFling, p)
+                if ok and res then flung = flung + 1 end
+                task.wait(0.1)
+            end
+            Notify("Fling Target", flung > 0 and ("Flung " .. flung .. "/" .. #targets) or "Failed", 3)
+        end)
     end, 1)
     mkAction(secTgt, "Teleport to Target", function()
         local t = currentTarget()
@@ -3104,6 +4080,7 @@ do
     mkSlider(secTgt, "Bang Speed", 1, 10, 3, function(v) S.BangSpeed = v end, 9)
 end
 end -- end FUN MODULE do-block
+local HUD = {}
 local HUDEls = {}
 local function mkDragHUD(name, pos, size, z)
     local f = Instance.new("Frame")
@@ -3112,24 +4089,24 @@ local function mkDragHUD(name, pos, size, z)
     f.Active = true
     f.Position = pos
     f.Size = size
-    f.BackgroundColor3 = Color3.fromRGB(7, 7, 7)
+    f.BackgroundColor3 = T.Card; f:SetAttribute("ThemeColorRole_BackgroundColor3", "Card")
     f.BackgroundTransparency = 0.05
     f.BorderSizePixel = 0
     f.Visible = false
     f.ZIndex = z or 850
     Corner(f, 10)
-    Stroke(f, T.Bd2, 1, 0.35)
+    local fSt = Stroke(f, T.Bd2, 1, 0.35); fSt:SetAttribute("ThemeColorRole_Color", "Bd2")
     Shadow(f, 0.45)
     local tb = Instance.new("Frame")
     tb.Parent = f
-    tb.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+    tb.BackgroundColor3 = T.Elev; tb:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev")
     tb.BorderSizePixel = 0
     tb.Size = UDim2.new(1, 0, 0, 26)
     tb.ZIndex = z + 1
     Corner(tb, 8)
     local tbLine = Instance.new("Frame")
     tbLine.Parent = tb
-    tbLine.BackgroundColor3 = T.Bd
+    tbLine.BackgroundColor3 = T.Bd; pcall(function() tbLine:SetAttribute("ThemeColorRole_BackgroundColor3", "Bd") end)
     tbLine.BackgroundTransparency = 0.2
     tbLine.BorderSizePixel = 0
     tbLine.AnchorPoint = Vector2.new(0, 1)
@@ -3138,7 +4115,7 @@ local function mkDragHUD(name, pos, size, z)
     tbLine.ZIndex = z + 1
     local tick = Instance.new("Frame")
     tick.Parent = tb
-    tick.BackgroundColor3 = T.White
+    tick.BackgroundColor3 = T.White; pcall(function() tick:SetAttribute("ThemeColorRole_BackgroundColor3", "White") end)
     tick.BorderSizePixel = 0
     tick.Position = UDim2.new(0, 8, 0.5, -5)
     tick.Size = UDim2.new(0, 2, 0, 10)
@@ -3151,7 +4128,7 @@ local function mkDragHUD(name, pos, size, z)
     tl.Position = UDim2.new(0, 16, 0, 0)
     tl.Font = FB
     tl.TextSize = 12
-    tl.TextColor3 = T.Tx3
+    tl.TextColor3 = T.Tx3; pcall(function() tl:SetAttribute("ThemeColorRole_TextColor3", "Tx3") end)
     tl.TextXAlignment = Enum.TextXAlignment.Left
     tl.Text = string.upper(name)
     tl.ZIndex = z + 2
@@ -3186,33 +4163,33 @@ local function mkDragHUD(name, pos, size, z)
     HUDEls[name] = { frame = f, content = ct }
     return HUDEls[name]
 end
-local hRoles = mkDragHUD("Roles", UDim2.new(0, 10, 0, 200), UDim2.fromOffset(260, 160), 850)
-Instance.new("UIListLayout", hRoles.content).Padding = UDim.new(0, 2)
-local hBinds = mkDragHUD("Keybinds", UDim2.new(0, 10, 0, 370), UDim2.fromOffset(260, 150), 851)
-Instance.new("UIListLayout", hBinds.content).Padding = UDim.new(0, 2)
-local hGun = mkDragHUD("Gun Status", UDim2.new(1, -272, 0, 200), UDim2.fromOffset(260, 80), 852)
-local gunLbl = Instance.new("TextLabel")
-gunLbl.Parent = hGun.content
-gunLbl.BackgroundTransparency = 1
-gunLbl.Size = UDim2.new(1, 0, 1, 0)
-gunLbl.Font = F
-gunLbl.TextSize = 15
-gunLbl.TextColor3 = T.Tx
-gunLbl.TextXAlignment = Enum.TextXAlignment.Left
-gunLbl.TextYAlignment = Enum.TextYAlignment.Top
-gunLbl.TextWrapped = true
-gunLbl.Text = "..."
-gunLbl.ZIndex = 853
-local hFps = mkDragHUD("FPS", UDim2.new(1, -115, 0, 10), UDim2.fromOffset(100, 42), 854)
-local fpsLbl = Instance.new("TextLabel")
-fpsLbl.Parent = hFps.content
-fpsLbl.BackgroundTransparency = 1
-fpsLbl.Size = UDim2.new(1, 0, 1, 0)
-fpsLbl.Font = FB
-fpsLbl.TextSize = 22
-fpsLbl.TextColor3 = T.White
-fpsLbl.Text = "0"
-fpsLbl.ZIndex = 855
+HUD.hRoles = mkDragHUD("Roles", UDim2.new(0, 10, 0, 200), UDim2.fromOffset(260, 160), 850)
+Instance.new("UIListLayout", HUD.hRoles.content).Padding = UDim.new(0, 2)
+HUD.hBinds = mkDragHUD("Keybinds", UDim2.new(0, 10, 0, 370), UDim2.fromOffset(260, 150), 851)
+Instance.new("UIListLayout", HUD.hBinds.content).Padding = UDim.new(0, 2)
+HUD.hGun = mkDragHUD("Gun Status", UDim2.new(1, -272, 0, 200), UDim2.fromOffset(260, 80), 852)
+HUD.gunLbl = Instance.new("TextLabel")
+HUD.gunLbl.Parent = HUD.hGun.content
+HUD.gunLbl.BackgroundTransparency = 1
+HUD.gunLbl.Size = UDim2.new(1, 0, 1, 0)
+HUD.gunLbl.Font = F
+HUD.gunLbl.TextSize = 15
+HUD.gunLbl.TextColor3 = T.Tx; pcall(function() HUD.gunLbl:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
+HUD.gunLbl.TextXAlignment = Enum.TextXAlignment.Left
+HUD.gunLbl.TextYAlignment = Enum.TextYAlignment.Top
+HUD.gunLbl.TextWrapped = true
+HUD.gunLbl.Text = "..."
+HUD.gunLbl.ZIndex = 853
+HUD.hFps = mkDragHUD("FPS", UDim2.new(1, -115, 0, 10), UDim2.fromOffset(100, 42), 854)
+HUD.fpsLbl = Instance.new("TextLabel")
+HUD.fpsLbl.Parent = HUD.hFps.content
+HUD.fpsLbl.BackgroundTransparency = 1
+HUD.fpsLbl.Size = UDim2.new(1, 0, 1, 0)
+HUD.fpsLbl.Font = FB
+HUD.fpsLbl.TextSize = 22
+HUD.fpsLbl.TextColor3 = T.White; pcall(function() HUD.fpsLbl:SetAttribute("ThemeColorRole_TextColor3", "White") end)
+HUD.fpsLbl.Text = "0"
+HUD.fpsLbl.ZIndex = 855
 local function mkStatHUD(name, pos, w, h, z, tsize)
     local hud = mkDragHUD(name, pos, UDim2.fromOffset(w, h), z)
     local lbl = Instance.new("TextLabel")
@@ -3221,7 +4198,7 @@ local function mkStatHUD(name, pos, w, h, z, tsize)
     lbl.Size = UDim2.new(1, 0, 1, 0)
     lbl.Font = FM
     lbl.TextSize = tsize or 15
-    lbl.TextColor3 = T.Tx
+    lbl.TextColor3 = T.Tx; pcall(function() lbl:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.TextYAlignment = Enum.TextYAlignment.Top
     lbl.TextWrapped = true
@@ -3259,13 +4236,42 @@ local function mkWatermark()
     local icon = Instance.new("Frame")
     icon.Parent = f
     icon.LayoutOrder = 1
-    icon.Size = UDim2.new(0, 10, 0, 10)
-    icon.Rotation = 45
-    icon.BackgroundColor3 = T.White
+    icon.Size = UDim2.fromOffset(18, 18)
+    icon.BackgroundColor3 = Color3.fromRGB(20, 20, 22)
     icon.BorderSizePixel = 0
     icon.ZIndex = 865
-    Corner(icon, 2)
-    Grad(icon, Color3.fromRGB(120, 180, 255), Color3.fromRGB(255, 255, 255), 45)
+    Corner(icon, 9999)
+    local iSt = Stroke(icon, Color3.fromRGB(70, 70, 75), 1.2, 0.4)
+    
+    local gun = Instance.new("Frame")
+    gun.Parent = icon
+    gun.Size = UDim2.fromScale(1, 1)
+    gun.BackgroundTransparency = 1
+    gun.ZIndex = 866
+
+    local barrel = Instance.new("Frame")
+    barrel.Parent = gun
+    barrel.Size = UDim2.fromOffset(10, 3)
+    barrel.Position = UDim2.fromOffset(4, 6)
+    barrel.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
+    barrel.BorderSizePixel = 0
+    barrel.ZIndex = 867
+
+    local grip = Instance.new("Frame")
+    grip.Parent = gun
+    grip.Size = UDim2.fromOffset(3, 4)
+    grip.Position = UDim2.fromOffset(4, 9)
+    grip.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
+    grip.BorderSizePixel = 0
+    grip.ZIndex = 867
+
+    local trig = Instance.new("Frame")
+    trig.Parent = gun
+    trig.Size = UDim2.fromOffset(2, 2)
+    trig.Position = UDim2.fromOffset(8, 9)
+    trig.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+    trig.BorderSizePixel = 0
+    trig.ZIndex = 867
     local lbl = Instance.new("TextLabel")
     lbl.Parent = f
     lbl.LayoutOrder = 2
@@ -3275,10 +4281,10 @@ local function mkWatermark()
     lbl.Font = FM
     lbl.TextSize = 14
     lbl.RichText = true
-    lbl.TextColor3 = T.Tx
+    lbl.TextColor3 = T.Tx; pcall(function() lbl:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
     lbl.TextYAlignment = Enum.TextYAlignment.Center
     lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Text = "MM2"
+    lbl.Text = "Inertia"
     lbl.ZIndex = 865
     do
         local dr, ds, sp
@@ -3298,15 +4304,45 @@ local function mkWatermark()
     HUDEls["Watermark"] = { frame = f, content = f }
     return f, lbl
 end
-local hPing, pingLbl = mkStatHUD("Ping", UDim2.new(1, -115, 0, 60), 100, 44, 856, 18)
-local hCoords, coordLbl = mkStatHUD("Coords", UDim2.new(0, 10, 0, 540), 210, 74, 857, 14)
-local hTime, timeLbl = mkStatHUD("Time", UDim2.new(1, -165, 0, 112), 150, 44, 858, 16)
-local hPlayers, playersLbl = mkStatHUD("Players", UDim2.new(1, -165, 0, 164), 150, 60, 859, 15)
-local hWatermark, watermarkLbl = mkWatermark()
-local hSpeed, speedLbl = mkStatHUD("Speed", UDim2.new(1, -115, 0, 110), 100, 44, 861, 16)
-local hSession, sessionLbl = mkStatHUD("Session", UDim2.new(1, -165, 0, 232), 150, 44, 863, 16)
+HUD.hPing, HUD.pingLbl = mkStatHUD("Ping", UDim2.new(1, -115, 0, 60), 100, 44, 856, 18)
+HUD.hCoords, HUD.coordLbl = mkStatHUD("Coords", UDim2.new(0, 10, 0, 540), 210, 74, 857, 14)
+HUD.hTime, HUD.timeLbl = mkStatHUD("Time", UDim2.new(1, -165, 0, 112), 150, 44, 858, 16)
+HUD.hPlayers, HUD.playersLbl = mkStatHUD("Players", UDim2.new(1, -165, 0, 164), 150, 60, 859, 15)
+HUD.hWatermark, HUD.watermarkLbl = mkWatermark()
+HUD.hSpeed, HUD.speedLbl = mkStatHUD("Speed", UDim2.new(1, -165, 0, 284), 150, 62, 861, 24)
+HUD.hSession, HUD.sessionLbl = mkStatHUD("Session", UDim2.new(1, -165, 0, 232), 150, 44, 863, 16)
+-- Kill Feed is NOT a window/panel anymore — it's a transparent container anchored top-right where
+-- kill cards pop in, hold, then fade + collapse out. It auto-sizes to its cards, so with no recent
+-- kills nothing is drawn (no big empty box). Registered in HUDEls so the toggle + config still work.
+
 do
-    local sec = mkSection(PHUD, "HUD Elements", 1)
+    local f = Instance.new("Frame")
+    f.Name = "HUD_Kill Feed"
+    f.Parent = SG
+    f.BackgroundTransparency = 1
+    f.BorderSizePixel = 0
+    f.Position = UDim2.new(1, -272, 0, 110)
+    f.Size = UDim2.new(0, 256, 0, 0)
+    f.AutomaticSize = Enum.AutomaticSize.Y
+    f.Visible = false
+    f.ZIndex = 864
+    local kfl = Instance.new("UIListLayout")
+    kfl.Parent = f
+    kfl.SortOrder = Enum.SortOrder.LayoutOrder
+    kfl.Padding = UDim.new(0, 6)
+    kfl.HorizontalAlignment = Enum.HorizontalAlignment.Right
+    kfl.VerticalAlignment = Enum.VerticalAlignment.Top
+    HUDEls["Kill Feed"] = { frame = f, content = f }
+    HUD.hKillFeed = HUDEls["Kill Feed"]
+end
+do
+    local sec = mkSection(Pages.HUD, "HUD Elements", 1)
+    mkToggle(sec, "Mobile Actions Panel", true, function(v)
+        local t = SG:FindFirstChild("MobileToggle")
+        local h = SG:FindFirstChild("MobileHUD")
+        if t then t.Visible = v end
+        if h then h.Visible = v end
+    end, 0)
     mkToggle(sec, "Roles HUD", false, function(v)
         S.HUD_Roles = v
         HUDEls["Roles"].frame.Visible = v
@@ -3341,7 +4377,17 @@ do
     end, 8)
     mkToggle(sec, "Watermark HUD", false, function(v)
         S.HUD_Watermark = v
-        HUDEls["Watermark"].frame.Visible = v
+        local wf = HUDEls["Watermark"].frame
+        if v then
+            -- If it was dragged (or a saved config restored it) off-screen, snap it back so it can't
+            -- silently "disappear".
+            local vp = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize
+            local px, py = wf.Position.X.Offset, wf.Position.Y.Offset
+            if (not vp) or px < 0 or py < 0 or px > (vp.X - 20) or py > (vp.Y - 20) then
+                wf.Position = UDim2.new(0, 12, 0, 12)
+            end
+        end
+        wf.Visible = v
     end, 9)
     mkToggle(sec, "Speed HUD", false, function(v)
         S.HUD_Speed = v
@@ -3351,6 +4397,10 @@ do
         S.HUD_Session = v
         HUDEls["Session"].frame.Visible = v
     end, 11)
+    mkToggle(sec, "Kill Feed", false, function(v)
+        S.HUD_KillFeed = v
+        HUDEls["Kill Feed"].frame.Visible = v
+    end, 12)
     local info = Instance.new("TextLabel")
     info.Parent = sec
     info.LayoutOrder = 13
@@ -3358,7 +4408,7 @@ do
     info.Size = UDim2.new(1, 0, 0, 22)
     info.Font = F
     info.TextSize = 13
-    info.TextColor3 = T.Tx4
+    info.TextColor3 = T.Tx4; pcall(function() info:SetAttribute("ThemeColorRole_TextColor3", "Tx4") end)
     info.TextXAlignment = Enum.TextXAlignment.Left
     info.Text = "Drag HUD elements by their header"
 end
@@ -3385,6 +4435,7 @@ local function clearShaderEffects()
         pcall(function() eff:Destroy() end)
     end
     shaderEffects = {}
+    S._ultraFX = nil   -- stop the RTX Ultra animator from touching destroyed effects
 end
 
 -- Central atmosphere manager (sky / fog / shader haze). Defined below; forward-declared
@@ -3491,14 +4542,6 @@ local function applyShader(name)
         sunrays.Parent = Lighting
         table.insert(shaderEffects, sunrays)
 
-        local dof = Instance.new("DepthOfFieldEffect")
-        dof.FarIntensity = 0.05
-        dof.FocusDistance = 55
-        dof.InFocusRadius = 60
-        dof.NearIntensity = 0.25
-        dof.Parent = Lighting
-        table.insert(shaderEffects, dof)
-
         local cc = Instance.new("ColorCorrectionEffect")
         cc.Brightness = 0.0
         cc.Contrast = 0.16
@@ -3507,27 +4550,72 @@ local function applyShader(name)
         cc.Parent = Lighting
         table.insert(shaderEffects, cc)
 
-    elseif name == "Night Shaders" then
-        -- Moody moonlit blue with soft glow and a cool tint.
-        Lighting.ClockTime = 0
-        Lighting.Brightness = 1.0
-        Lighting.Ambient = Color3.fromRGB(26, 34, 62)
-        Lighting.OutdoorAmbient = Color3.fromRGB(34, 44, 82)
+    elseif name == "RTX Ultra" then
+        -- Premium cinematic look: bright & vibrant with soft glowing highlights, gentle god-rays and a
+        -- light depth-of-field — WITHOUT blowing the scene out. Only genuinely bright spots bloom (high
+        -- threshold), exposure is modest, saturation is rich but not crushed. The animator just makes it
+        -- "breathe" softly instead of pulsing hard.
+        Lighting.ClockTime = 15.2
+        Lighting.Brightness = 2.3
         Lighting.GlobalShadows = true
-        pcall(function() Lighting.ExposureCompensation = 0.0 end)
+        Lighting.Ambient = Color3.fromRGB(104, 108, 122)
+        Lighting.OutdoorAmbient = Color3.fromRGB(150, 155, 170)
+        pcall(function() Lighting.ExposureCompensation = 0.09 end)
+
+        local bloom = Instance.new("BloomEffect")
+        bloom.Intensity = 0.9
+        bloom.Size = 34
+        bloom.Threshold = 1.4
+        bloom.Parent = Lighting
+        table.insert(shaderEffects, bloom)
+
+        local sunrays = Instance.new("SunRaysEffect")
+        sunrays.Intensity = 0.16
+        sunrays.Spread = 0.7
+        sunrays.Parent = Lighting
+        table.insert(shaderEffects, sunrays)
+
+        local dof = Instance.new("DepthOfFieldEffect")
+        dof.FarIntensity = 0.08
+        dof.FocusDistance = 45
+        dof.InFocusRadius = 55
+        dof.NearIntensity = 0.2
+        dof.Parent = Lighting
+        table.insert(shaderEffects, dof)
 
         local cc = Instance.new("ColorCorrectionEffect")
         cc.Brightness = 0.0
-        cc.TintColor = Color3.fromRGB(155, 178, 255)
-        cc.Contrast = 0.16
-        cc.Saturation = 0.04
+        cc.Contrast = 0.18
+        cc.Saturation = 0.32
+        cc.TintColor = Color3.fromRGB(255, 251, 246)
+        cc.Parent = Lighting
+        table.insert(shaderEffects, cc)
+
+        -- Live references for the animator loop (cleared in clearShaderEffects).
+        S._ultraFX = { bloom = bloom, sunrays = sunrays, cc = cc }
+
+    elseif name == "Night Shaders" then
+        -- Moody moonlit blue with soft glow and a cool tint. Ambient lifted so
+        -- shadowed corners / indoors don't crush to black.
+        Lighting.ClockTime = 0
+        Lighting.Brightness = 1.7
+        Lighting.Ambient = Color3.fromRGB(72, 86, 122)
+        Lighting.OutdoorAmbient = Color3.fromRGB(88, 104, 146)
+        Lighting.GlobalShadows = true
+        pcall(function() Lighting.ExposureCompensation = 0.15 end)
+
+        local cc = Instance.new("ColorCorrectionEffect")
+        cc.Brightness = 0.06
+        cc.TintColor = Color3.fromRGB(165, 186, 255)
+        cc.Contrast = 0.15
+        cc.Saturation = 0.28
         cc.Parent = Lighting
         table.insert(shaderEffects, cc)
 
         local bloom = Instance.new("BloomEffect")
-        bloom.Intensity = 0.5
-        bloom.Size = 20
-        bloom.Threshold = 1.3
+        bloom.Intensity = 0.7
+        bloom.Size = 24
+        bloom.Threshold = 1.2
         bloom.Parent = Lighting
         table.insert(shaderEffects, bloom)
 
@@ -3570,14 +4658,6 @@ local function applyShader(name)
         bloom.Threshold = 1.6
         bloom.Parent = Lighting
         table.insert(shaderEffects, bloom)
-
-        local dof = Instance.new("DepthOfFieldEffect")
-        dof.FarIntensity = 0.12
-        dof.FocusDistance = 45
-        dof.InFocusRadius = 40
-        dof.NearIntensity = 0.3
-        dof.Parent = Lighting
-        table.insert(shaderEffects, dof)
 
         local cc = Instance.new("ColorCorrectionEffect")
         cc.Contrast = 0.25
@@ -3715,12 +4795,32 @@ task.spawn(function()
         task.wait(0.2)
     end
 end)
+-- RTX Ultra animator: softly "breathes" the glow / god-rays / saturation so the preset feels alive
+-- without ever spiking into an over-bright, blown-out look. Only runs while RTX Ultra is active.
+task.spawn(function()
+    while S.Gui and S.Gui.Parent do
+        local fx = S._ultraFX
+        if S.ActiveShader == "RTX Ultra" and fx then
+            pcall(function()
+                local t = tick()
+                if fx.bloom and fx.bloom.Parent then fx.bloom.Intensity = 0.85 + 0.12 * math.sin(t * 1.1) end
+                if fx.sunrays and fx.sunrays.Parent then fx.sunrays.Intensity = 0.15 + 0.05 * math.sin(t * 0.8) end
+                if fx.cc and fx.cc.Parent then
+                    fx.cc.Saturation = 0.32 + 0.05 * math.sin(t * 1.0)
+                end
+            end)
+            task.wait(0.05)
+        else
+            task.wait(0.2)
+        end
+    end
+end)
 do
-    local sec = mkSection(PShaders, "Presets", 1)
+    local sec = mkSection(Pages.Shaders, "Presets", 1)
     -- One exclusive toggle per preset, generated from this list: turning one on switches the
     -- others off; turning the active one off returns to "None".
     local SHADER_LIST = {
-        "RTX Low", "RTX Medium", "RTX High", "Night Shaders", "Pink Shaders",
+        "RTX Low", "RTX Medium", "RTX High", "RTX Ultra", "Night Shaders", "Pink Shaders",
         "Cinematic", "Golden Hour", "Arctic", "Neon", "Noir",
     }
     local shaderToggles = {}
@@ -3759,6 +4859,7 @@ do
         ["RTX Low"]       = {density=0.20, offset=0.15, color=Color3.fromRGB(200,206,216), decay=Color3.fromRGB(120,140,182), glare=0.08, haze=1.1},
         ["RTX Medium"]    = {density=0.24, offset=0.20, color=Color3.fromRGB(206,210,218), decay=Color3.fromRGB(110,140,190), glare=0.15, haze=1.5},
         ["RTX High"]      = {density=0.28, offset=0.25, color=Color3.fromRGB(212,215,224), decay=Color3.fromRGB(100,136,200), glare=0.25, haze=1.9},
+        ["RTX Ultra"]     = {density=0.28, offset=0.26, color=Color3.fromRGB(214,219,230), decay=Color3.fromRGB(96,140,210),  glare=0.22, haze=1.8},
         ["Night Shaders"] = {density=0.36, offset=0.10, color=Color3.fromRGB(34,44,88),   decay=Color3.fromRGB(12,16,46),   glare=0.05, haze=1.9},
         ["Pink Shaders"]  = {density=0.28, offset=0.20, color=Color3.fromRGB(255,192,216), decay=Color3.fromRGB(255,150,185), glare=0.25, haze=2.0},
         ["Cinematic"]     = {density=0.30, offset=0.22, color=Color3.fromRGB(198,205,215), decay=Color3.fromRGB(105,130,175), glare=0.22, haze=2.0},
@@ -3948,9 +5049,9 @@ do
 end
 -- ============ HAND SHADERS (self highlight / outline for the local player only) ============
 do
-    local sec = mkSection(PShaders, "Hand Shaders (Self)", 2)
+    local sec = mkSection(Pages.Shaders, "Hand Shaders (Self)", 2)
     mkToggle(sec, "Enable Hand Shader", false, function(v) S.HandShader = v end, 1)
-    mkCycle(sec, "Shader Type", {"Both", "Fill", "Outline", "Mirror", "Bloom", "Maze"}, "Both", function(v) S.HandShaderType = v end, 2)
+    mkCycle(sec, "Shader Type", {"Both", "Fill", "Outline", "Mirror", "Bloom", "Maze", "Crystal", "Chrome", "Plasma"}, "Both", function(v) S.HandShaderType = v end, 2)
     mkCycle(sec, "Apply To", {"Full Body", "Held Item"}, "Full Body", function(v) S.HandTarget = v end, 3)
     mkCycle(sec, "Color", {"Cyan", "White", "Red", "Green", "Blue", "Yellow", "Purple", "Orange", "Pink", "Black"}, "Cyan", function(v) S.HandColor = v end, 4)
     mkToggle(sec, "Rainbow", false, function(v) S.HandRainbow = v end, 5)
@@ -4020,14 +5121,15 @@ do
                 end
 
                 if shaderOn and adornee then
-                    local isMaterialShader = (shaderType == "Mirror" or shaderType == "Bloom" or shaderType == "Maze")
+                    local isMaterialShader = (shaderType == "Mirror" or shaderType == "Bloom" or shaderType == "Maze"
+                        or shaderType == "Crystal" or shaderType == "Chrome" or shaderType == "Plasma")
                     
                     local col
                     if S.HandRainbow then
                         hue = (hue + 0.02) % 1
                         col = Color3.fromHSV(hue, 0.85, 1)
                     else
-                        col = FOV_COLORS[S.HandColor] or Color3.fromRGB(0, 255, 255)
+                        col = (S.HandColor == "Black") and Color3.fromRGB(0, 0, 0) or (FOV_COLORS[S.HandColor] or Color3.fromRGB(0, 255, 255))
                     end
 
                     if isMaterialShader then
@@ -4041,6 +5143,7 @@ do
                                     origTransparencies[part] = part.Transparency
                                 end
                                 
+                                local partCol = col
                                 if shaderType == "Mirror" then
                                     part.Material = Enum.Material.Glass
                                     part.Reflectance = 1
@@ -4053,8 +5156,26 @@ do
                                     part.Material = Enum.Material.ForceField
                                     part.Reflectance = 0
                                     part.Transparency = 1 - (S.HandFill or 60) / 100
+                                elseif shaderType == "Crystal" then
+                                    -- Translucent gemstone: glassy, lightly reflective, see-through.
+                                    part.Material = Enum.Material.Glass
+                                    part.Reflectance = 0.4
+                                    part.Transparency = 0.55
+                                elseif shaderType == "Chrome" then
+                                    -- Polished solid metal, mirror-like but not see-through.
+                                    part.Material = Enum.Material.Metal
+                                    part.Reflectance = 0.9
+                                    part.Transparency = 0
+                                elseif shaderType == "Plasma" then
+                                    -- Pulsing neon energy: brightness breathes over time.
+                                    part.Material = Enum.Material.Neon
+                                    part.Reflectance = 0
+                                    part.Transparency = 1 - (S.HandFill or 60) / 100
+                                    local h, s, v = col:ToHSV()
+                                    local pulse = 0.65 + 0.35 * math.sin(tick() * 4)
+                                    partCol = Color3.fromHSV(h, s, math.clamp(v * pulse, 0, 1))
                                 end
-                                part.Color = col
+                                part.Color = partCol
                             end
                         end
                     else
@@ -4075,7 +5196,7 @@ do
                     if hl then hl.Enabled = false end
                 end
             end)
-            task.wait(S.HandRainbow and 0.03 or 0.1)
+            task.wait((S.HandRainbow or S.HandShaderType == "Plasma") and 0.03 or 0.1)
         end
     end)
 
@@ -4087,7 +5208,7 @@ do
 end
 -- ============ WORLD TAB (coins + environment: time / gravity / effects) ============
 do
-    local sec2 = mkSection(PWorld, "Environment", 1)
+    local sec2 = mkSection(Pages.World, "Environment", 1)
     mkToggle(sec2, "Custom Time", false, function(v) S.CustomTime = v end, 1)
     mkSlider(sec2, "Time of Day", 0, 24, 14, function(v) S.TimeOfDay = v end, 2)
     mkSlider(sec2, "Gravity", 10, 200, 196, function(v)
@@ -4129,25 +5250,34 @@ end
 
 do
     -- Find every coin part. A part is a coin if ITS name OR its parent MODEL's name contains "coin"
-    -- (this game's coins are Model "Coin_Server" > "CoinVisual" > MeshParts). Scan the map first,
-    -- fall back to the whole workspace if the map folder isn't named "Normal" this version.
+    -- (this game's coins are Model "Coin_Server" > "CoinVisual" > MeshParts).
+    -- PERF: the coin list is CACHED. The old version did `workspace:GetDescendants()` (the WHOLE game)
+    -- every call — ~20x/sec while farming — which was the main cause of the lag / RAM churn. Now we
+    -- locate the small "CoinContainer" once and rebuild the coin-part list at most ~once per second;
+    -- every other call just reuses the cached list (coins don't respawn mid-round, they only fade).
+    local coinContainer, coinCache, coinCacheAt = nil, {}, 0
     local function eachCoin(fn)
-        local found = false
-        local function scan(root)
-            if not root then return end
-            for _, v in ipairs(root:GetDescendants()) do
-                if v:IsA("BasePart") then
-                    local n = string.lower(v.Name)
-                    local pn = v.Parent and string.lower(v.Parent.Name) or ""
-                    if string.find(n, "coin") or string.find(pn, "coin") then
-                        found = true
-                        fn(v)
+        if not (coinContainer and coinContainer.Parent) then
+            coinContainer = workspace:FindFirstChild("CoinContainer", true)
+        end
+        if tick() - coinCacheAt > 1 or #coinCache == 0 then
+            coinCache = {}
+            local root = coinContainer or workspace:FindFirstChild("Normal")
+            if root then
+                for _, v in ipairs(root:GetDescendants()) do
+                    if v:IsA("BasePart") then
+                        local par = v.Parent
+                        if string.find(string.lower(v.Name), "coin") or (par and string.find(string.lower(par.Name), "coin")) then
+                            table.insert(coinCache, v)
+                        end
                     end
                 end
             end
+            coinCacheAt = tick()
         end
-        scan(workspace:FindFirstChild("Normal"))
-        if not found then scan(workspace) end
+        for _, v in ipairs(coinCache) do
+            if v.Parent then fn(v) end
+        end
     end
 
     -- Fly STRAIGHT THROUGH WALLS to a point: noclip every step + set the CFrame directly. Returns
@@ -4193,10 +5323,10 @@ do
     end
 
     -- ---------- UI ----------
-    local secCoins = mkSection(PAutofarm, "Coins", 1)
+    local secCoins = mkSection(Pages.Autofarm, "Coins", 1)
     mkToggle(secCoins, "Coin ESP", false, function(v) S.CoinESP = v end, 1)
 
-    local secAuto = mkSection(PAutofarm, "Automated", 2)
+    local secAuto = mkSection(Pages.Autofarm, "Automated", 2)
     mkToggle(secAuto, "Fast Autofarm", false, function(v) S.FastAutofarm = v end, 1)
     -- Studs/s (1-40). Lower = safer / less likely the position validator lags you back through walls.
     mkSlider(secAuto, "Autofarm Speed", 1, 40, 20, function(v) S.FastAutofarmSpeed = v end, 2)
@@ -4284,15 +5414,54 @@ do
                     if hrp and hum and hum.Health > 0 and isRoundActive() then
                         local myPos = hrp.Position
                         local coins = {}
+                        local murderPos = nil
+                        for _, p in ipairs(Players:GetPlayers()) do
+                            if p ~= LP and p.Character and getRole(p) == "Murderer" then
+                                local mHrp = p.Character:FindFirstChild("HumanoidRootPart")
+                                if mHrp then
+                                    murderPos = mHrp.Position
+                                    break
+                                end
+                            end
+                        end
                         eachCoin(function(coin)
-                            if coin.Transparency < 1 and not skip[coin] then table.insert(coins, coin) end
+                            if coin.Transparency < 1 and not skip[coin] then
+                                local isSafe = true
+                                if murderPos then
+                                    local distToMurd = (coin.Position - murderPos).Magnitude
+                                    if distToMurd < 45 then
+                                        isSafe = false
+                                    end
+                                end
+                                if isSafe then
+                                    table.insert(coins, coin)
+                                end
+                            end
                         end)
-                        if #coins > 0 then
-                            -- collect the nearest coin (flying through walls to reach it).
-                            hrp.Anchored = false
+                        if #coins == 0 then
+                            eachCoin(function(coin)
+                                if coin.Transparency < 1 and not skip[coin] then
+                                    table.insert(coins, coin)
+                                end
+                            end)
+                            if #coins > 0 then
+                                if murderPos then
+                                    table.sort(coins, function(a, b)
+                                        return (a.Position - murderPos).Magnitude > (b.Position - murderPos).Magnitude
+                                    end)
+                                else
+                                    table.sort(coins, function(a, b)
+                                        return (a.Position - myPos).Magnitude < (b.Position - myPos).Magnitude
+                                    end)
+                                end
+                            end
+                        else
                             table.sort(coins, function(a, b)
                                 return (a.Position - myPos).Magnitude < (b.Position - myPos).Magnitude
                             end)
+                        end
+                        if #coins > 0 then
+                            hrp.Anchored = false
                             local targetCoin = coins[1]
                             local function vacuum()
                                 if not firetouchinterest then return end
@@ -4358,7 +5527,10 @@ local function _cfgSanitize(name)
     return name
 end
 local function buildConfig()
-    local data = { controls = {}, hud = {}, binds = {} }
+    local data = {
+        SelectedTheme = S.SelectedTheme,
+        Language = S.Language,
+        TextSizeScale = S.TextSizeScale, controls = {}, hud = {}, binds = {} }
     for _, c in ipairs(ConfigControls) do
         local ok, val = pcall(c.get)
         if ok and val ~= nil then data.controls[c.id] = val end
@@ -4455,29 +5627,29 @@ local function listConfigs()
 end
 do
     if not FILE_OK then
-        local sec = mkSection(PConfig, "Configs", 1)
+        local sec = mkSection(Pages.Config, "Configs", 1)
         local warn = Instance.new("TextLabel")
         warn.Parent = sec; warn.LayoutOrder = 1; warn.BackgroundTransparency = 1
         warn.Size = UDim2.new(1, 0, 0, 46); warn.Font = F; warn.TextSize = 13
-        warn.TextColor3 = T.Tx2; warn.TextWrapped = true
+        warn.TextColor3 = T.Tx2; pcall(function() warn:SetAttribute("ThemeColorRole_TextColor3", "Tx2") end); warn.TextWrapped = true
         warn.TextXAlignment = Enum.TextXAlignment.Left
         warn.Text = "This executor has no file API (writefile/readfile), so configs cannot be saved."
     else
-        local sec1 = mkSection(PConfig, "Configs", 1)
+        local sec1 = mkSection(Pages.Config, "Configs", 1)
         local nameBox = Instance.new("TextBox")
         nameBox.Parent = sec1; nameBox.LayoutOrder = 1
-        nameBox.Size = UDim2.new(1, 0, 0, 30); nameBox.BackgroundColor3 = T.Elev
+        nameBox.Size = UDim2.new(1, 0, 0, 30); nameBox.BackgroundColor3 = T.Elev; pcall(function() nameBox:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
         nameBox.BorderSizePixel = 0; nameBox.Font = F; nameBox.TextSize = 13
-        nameBox.TextColor3 = T.Tx; nameBox.PlaceholderText = "config name..."
+        nameBox.TextColor3 = T.Tx; pcall(function() nameBox:SetAttribute("ThemeColorRole_TextColor3", "Tx") end); nameBox.PlaceholderText = "config name..."
         nameBox.PlaceholderColor3 = T.Tx4; nameBox.Text = ""
         nameBox.ClearTextOnFocus = false; nameBox.TextXAlignment = Enum.TextXAlignment.Left
         Corner(nameBox, 6); Stroke(nameBox, T.Bd2, 1, 0.4); Pad(nameBox, 0, 0, 8, 8)
         local list = Instance.new("ScrollingFrame")
         list.Parent = sec1; list.LayoutOrder = 2
-        list.Size = UDim2.new(1, 0, 0, 120); list.BackgroundColor3 = T.Card
+        list.Size = UDim2.new(1, 0, 0, 120); list.BackgroundColor3 = T.Card; pcall(function() list:SetAttribute("ThemeColorRole_BackgroundColor3", "Card") end)
         list.BorderSizePixel = 0; list.CanvasSize = UDim2.new(0, 0, 0, 0)
         list.AutomaticCanvasSize = Enum.AutomaticSize.Y; list.ScrollBarThickness = 3
-        list.ScrollBarImageColor3 = T.Tx3
+        list.ScrollBarImageColor3 = T.Tx3; pcall(function() list:SetAttribute("ThemeColorRole_ScrollBarImageColor3", "Tx3") end)
         Corner(list, 8); Stroke(list, T.Bd, 1, 0.4)
         local ll = Instance.new("UIListLayout"); ll.Parent = list
         ll.SortOrder = Enum.SortOrder.Name; ll.Padding = UDim.new(0, 4)
@@ -4488,14 +5660,14 @@ do
             for _, nm in ipairs(listConfigs()) do
                 local b = Instance.new("TextButton")
                 b.Name = nm; b.Parent = list; b.Size = UDim2.new(1, 0, 0, 28)
-                b.BackgroundColor3 = T.Elev; b.BorderSizePixel = 0; b.AutoButtonColor = false
-                b.Font = F; b.TextSize = 13; b.TextColor3 = T.Tx
+                b.BackgroundColor3 = T.Elev; pcall(function() b:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end); b.BorderSizePixel = 0; b.AutoButtonColor = false
+                b.Font = F; b.TextSize = 13; b.TextColor3 = T.Tx; pcall(function() b:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
                 b.Text = "  " .. nm; b.TextXAlignment = Enum.TextXAlignment.Left
                 Corner(b, 6)
                 b.MouseButton1Click:Connect(function()
                     selected = nm; nameBox.Text = nm
-                    for _, cb in pairs(list:GetChildren()) do if cb:IsA("TextButton") then cb.BackgroundColor3 = T.Elev end end
-                    b.BackgroundColor3 = T.ActiveBg
+                    for _, cb in pairs(list:GetChildren()) do if cb:IsA("TextButton") then cb.BackgroundColor3 = T.Elev; pcall(function() cb:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end) end end
+                    b.BackgroundColor3 = T.ActiveBg; pcall(function() b:SetAttribute("ThemeColorRole_BackgroundColor3", "ActiveBg") end)
                 end)
             end
         end
@@ -4524,12 +5696,12 @@ do
             Notify("Config", "Deleted: " .. n, 3)
         end, 5)
         mkAction(sec1, "Refresh List", function() refreshList() end, 6)
-        local sec2 = mkSection(PConfig, "Auto", 2)
+        local sec2 = mkSection(Pages.Config, "Auto", 2)
         mkToggle(sec2, "Auto Save", true, function(v) S.AutoSaveCfg = v end, 1)
         local info = Instance.new("TextLabel")
         info.Parent = sec2; info.LayoutOrder = 2; info.BackgroundTransparency = 1
         info.Size = UDim2.new(1, 0, 0, 46); info.Font = F; info.TextSize = 12
-        info.TextColor3 = T.Tx4; info.TextWrapped = true
+        info.TextColor3 = T.Tx4; pcall(function() info:SetAttribute("ThemeColorRole_TextColor3", "Tx4") end); info.TextWrapped = true
         info.TextXAlignment = Enum.TextXAlignment.Left
         info.Text = "Auto Save keeps your current settings + HUD layout and restores them automatically on next launch."
     end
@@ -4539,10 +5711,23 @@ if FILE_OK then
         task.wait(1)
         pcall(function() loadConfig("_autoload") end)
     end)
+    -- Auto-save writes to disk ONLY when the config actually changed. The old version rewrote the
+    -- file every 5s no matter what, so it did constant synchronous disk I/O (a periodic micro-stutter)
+    -- even while idle. Now an unchanged config is a no-op; a change is persisted within ~5s.
     task.spawn(function()
+        local lastEnc = nil
         while S.Gui and S.Gui.Parent do
             task.wait(5)
-            if S.AutoSaveCfg then pcall(function() saveConfig("_autoload") end) end
+            if S.AutoSaveCfg then
+                pcall(function()
+                    local enc = CfgHttp:JSONEncode(buildConfig())
+                    if enc ~= lastEnc then
+                        _cfgEnsureDir()
+                        writefile(CFG_DIR .. "/_autoload.json", enc)
+                        lastEnc = enc
+                    end
+                end)
+            end
         end
     end)
 end
@@ -4645,7 +5830,7 @@ do
         row.Name = "SrvRow"
         row.LayoutOrder = order
         row.Size = UDim2.new(1, 0, 0, 34)
-        row.BackgroundColor3 = T.Elev
+        row.BackgroundColor3 = T.Elev; pcall(function() row:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
         row.BorderSizePixel = 0
         row.Parent = parent
         Corner(row, 6)
@@ -4656,7 +5841,7 @@ do
         lbl.Size = UDim2.new(1, -14 - n * 30, 1, 0)
         lbl.Font = F
         lbl.TextSize = 12
-        lbl.TextColor3 = T.Tx
+        lbl.TextColor3 = T.Tx; pcall(function() lbl:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.TextTruncate = Enum.TextTruncate.AtEnd
         lbl.Text = mainText
@@ -4666,7 +5851,7 @@ do
             btn.AnchorPoint = Vector2.new(1, 0.5)
             btn.Position = UDim2.new(1, -6 - (n - i) * 30, 0.5, 0)
             btn.Size = UDim2.fromOffset(26, 26)
-            btn.BackgroundColor3 = T.Card
+            btn.BackgroundColor3 = T.Card; pcall(function() btn:SetAttribute("ThemeColorRole_BackgroundColor3", "Card") end)
             btn.BorderSizePixel = 0
             btn.AutoButtonColor = false
             btn.Font = FM
@@ -4675,7 +5860,7 @@ do
             btn.TextColor3 = b.color or T.Tx
             Corner(btn, 6)
             local base = T.Card
-            btn.MouseEnter:Connect(function() btn.BackgroundColor3 = T.Hover end)
+            btn.MouseEnter:Connect(function() btn.BackgroundColor3 = T.Hover; pcall(function() btn:SetAttribute("ThemeColorRole_BackgroundColor3", "Hover") end) end)
             btn.MouseLeave:Connect(function() btn.BackgroundColor3 = base end)
             btn.MouseButton1Click:Connect(function() SFX.Click(); b.cb() end)
         end
@@ -4686,12 +5871,12 @@ do
         sc.Parent = parent
         sc.LayoutOrder = order
         sc.Size = UDim2.new(1, 0, 0, height)
-        sc.BackgroundColor3 = T.Card
+        sc.BackgroundColor3 = T.Card; pcall(function() sc:SetAttribute("ThemeColorRole_BackgroundColor3", "Card") end)
         sc.BorderSizePixel = 0
         sc.CanvasSize = UDim2.new(0, 0, 0, 0)
         sc.AutomaticCanvasSize = Enum.AutomaticSize.Y
         sc.ScrollBarThickness = 3
-        sc.ScrollBarImageColor3 = T.Tx3
+        sc.ScrollBarImageColor3 = T.Tx3; pcall(function() sc:SetAttribute("ThemeColorRole_ScrollBarImageColor3", "Tx3") end)
         Corner(sc, 8)
         Stroke(sc, T.Bd, 1, 0.4)
         local ll = Instance.new("UIListLayout")
@@ -4708,16 +5893,16 @@ do
     local DEL_COLOR = Color3.fromRGB(240, 95, 95)
 
     -- ---------- Current server ----------
-    local secCur = mkSection(PServers, "Current Server", 1)
+    local secCur = mkSection(Pages.Servers, "Current Server", 1)
     local idBox = Instance.new("TextBox")
     idBox.Parent = secCur
     idBox.LayoutOrder = 1
     idBox.Size = UDim2.new(1, 0, 0, 30)
-    idBox.BackgroundColor3 = T.Elev
+    idBox.BackgroundColor3 = T.Elev; pcall(function() idBox:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
     idBox.BorderSizePixel = 0
     idBox.Font = F
     idBox.TextSize = 12
-    idBox.TextColor3 = T.Tx
+    idBox.TextColor3 = T.Tx; pcall(function() idBox:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
     idBox.Text = (game.JobId ~= "" and game.JobId) or "(no Job ID - Studio?)"
     idBox.ClearTextOnFocus = false
     idBox.TextEditable = false
@@ -4736,7 +5921,7 @@ do
     curInfo.Size = UDim2.new(1, 0, 0, 18)
     curInfo.Font = F
     curInfo.TextSize = 12
-    curInfo.TextColor3 = T.Tx3
+    curInfo.TextColor3 = T.Tx3; pcall(function() curInfo:SetAttribute("ThemeColorRole_TextColor3", "Tx3") end)
     curInfo.TextXAlignment = Enum.TextXAlignment.Left
     curInfo.RichText = true
     curInfo.Text = "Region: \u{2026}   \u{00B7}   Ping: \u{2026}"
@@ -4781,16 +5966,16 @@ do
     mkAction(secCur, "Rejoin This Server", function() joinId(game.JobId) end, 5)
 
     -- ---------- Add server by Job ID ----------
-    local secAdd = mkSection(PServers, "Add Server", 2)
+    local secAdd = mkSection(Pages.Servers, "Add Server", 2)
     local addId = Instance.new("TextBox")
     addId.Parent = secAdd
     addId.LayoutOrder = 1
     addId.Size = UDim2.new(1, 0, 0, 30)
-    addId.BackgroundColor3 = T.Elev
+    addId.BackgroundColor3 = T.Elev; pcall(function() addId:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
     addId.BorderSizePixel = 0
     addId.Font = F
     addId.TextSize = 12
-    addId.TextColor3 = T.Tx
+    addId.TextColor3 = T.Tx; pcall(function() addId:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
     addId.PlaceholderText = "Job ID (paste here)..."
     addId.PlaceholderColor3 = T.Tx4
     addId.Text = ""
@@ -4803,11 +5988,11 @@ do
     addName.Parent = secAdd
     addName.LayoutOrder = 2
     addName.Size = UDim2.new(1, 0, 0, 30)
-    addName.BackgroundColor3 = T.Elev
+    addName.BackgroundColor3 = T.Elev; pcall(function() addName:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
     addName.BorderSizePixel = 0
     addName.Font = F
     addName.TextSize = 12
-    addName.TextColor3 = T.Tx
+    addName.TextColor3 = T.Tx; pcall(function() addName:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
     addName.PlaceholderText = "Label (optional)..."
     addName.PlaceholderColor3 = T.Tx4
     addName.Text = ""
@@ -4822,7 +6007,7 @@ do
     mkAction(secAdd, "Join Entered Job ID", function() joinId((addId.Text or ""):gsub("%s", "")) end, 4)
 
     -- ---------- Saved servers (favourites float to the top) ----------
-    local secSaved = mkSection(PServers, "Saved Servers", 3)
+    local secSaved = mkSection(Pages.Servers, "Saved Servers", 3)
     local savedScroll = mkScroll(secSaved, 1, 168)
     local savedEmpty = Instance.new("TextLabel")
     savedEmpty.Parent = secSaved
@@ -4831,7 +6016,7 @@ do
     savedEmpty.Size = UDim2.new(1, 0, 0, 18)
     savedEmpty.Font = F
     savedEmpty.TextSize = 12
-    savedEmpty.TextColor3 = T.Tx4
+    savedEmpty.TextColor3 = T.Tx4; pcall(function() savedEmpty:SetAttribute("ThemeColorRole_TextColor3", "Tx4") end)
     savedEmpty.TextXAlignment = Enum.TextXAlignment.Left
     savedEmpty.Text = "★ = favourite (kept at top).  → join   ⧉ copy   ✕ remove"
     refreshSaved = function()
@@ -4855,7 +6040,7 @@ do
     end
 
     -- ---------- Recent servers (auto-recorded across sessions) ----------
-    local secRecent = mkSection(PServers, "Recent Servers", 4)
+    local secRecent = mkSection(Pages.Servers, "Recent Servers", 4)
     local recentScroll = mkScroll(secRecent, 1, 140)
     refreshRecent = function()
         clearRows(recentScroll)
@@ -4875,7 +6060,7 @@ do
     end, 2)
 
     -- ---------- Browse public servers ----------
-    local secBrowse = mkSection(PServers, "Browse Public Servers", 5)
+    local secBrowse = mkSection(Pages.Servers, "Browse Public Servers", 5)
     local browseScroll = mkScroll(secBrowse, 1, 168)
     local function fetchServers()
         clearRows(browseScroll)
@@ -4953,7 +6138,7 @@ for k = 1, 3 do
     local ln = Instance.new("Frame")
     ln.Parent = RH
     ln.BorderSizePixel = 0
-    ln.BackgroundColor3 = T.Tx3
+    ln.BackgroundColor3 = T.Tx3; pcall(function() ln:SetAttribute("ThemeColorRole_BackgroundColor3", "Tx3") end)
     ln.Rotation = -45
     ln.ZIndex = 1005
     ln.Size = UDim2.new(0, 12 - (k-1)*4, 0, 1.5)
@@ -4971,7 +6156,7 @@ do
     tc(UIS.InputChanged:Connect(function(i)
         if rs and i.UserInputType == Enum.UserInputType.MouseMovement then
             local d = i.Position - rm
-            expandedSize = UDim2.fromOffset(math.max(460, rz.X + d.X), math.max(310, rz.Y + d.Y))
+            expandedSize = UDim2.fromOffset(math.max(360, rz.X + d.X), math.max(220, rz.Y + d.Y))
             Main.Size = expandedSize
         end
     end))
@@ -5027,17 +6212,21 @@ createHighlight = function(adornee, color, name)
     hl.FillTransparency = 1 - (S.ChamsOpacity or 50) / 100
     hl.OutlineColor = color
     hl.OutlineTransparency = 0
-    hl.DepthMode = S.ChamsVisibleCheck and Enum.HighlightDepthMode.Occluded or Enum.HighlightDepthMode.AlwaysOnTop
+    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     hl.Parent = adornee
     return hl
 end
 task.spawn(function()
     local notified = false
+    local _roleRemote  -- cache the remote so we don't recursively search ReplicatedStorage every poll
     while S.Gui and S.Gui.Parent do
         local now = tick()
         if now - LastRemoteFetch >= 0.3 then
             LastRemoteFetch = now
-            local rem = game:GetService("ReplicatedStorage"):FindFirstChild("GetPlayerData", true)
+            if not (_roleRemote and _roleRemote.Parent) then
+                _roleRemote = game:GetService("ReplicatedStorage"):FindFirstChild("GetPlayerData", true)
+            end
+            local rem = _roleRemote
             if rem then
                 local ok, data = pcall(function() return rem:InvokeServer() end)
                 if ok and type(data) == "table" then
@@ -5063,9 +6252,10 @@ task.spawn(function()
                     end
                     if fm and not notified then
                         notified = true
-                        local msg = "Murder: "..fm
-                        if fs then msg = msg.." | Sheriff: "..fs end
-                        Notify("Roles", msg, 5)
+                        -- Two lines (title = murderer, body = sheriff) so neither name is truncated:
+                        -- the old single "Murder: X | Sheriff: Y" line overflowed the toast width and
+                        -- cut the Sheriff name off to "...".
+                        Notify("Murderer: "..fm, "Sheriff: "..(fs or "?"), 5)
                     end
                 end
             end
@@ -5075,41 +6265,18 @@ task.spawn(function()
 end)
 getRole = function(player)
     local cached = RoleCache[player.Name]
-    -- Murderer keeps the knife all round, so the server cache is reliable for them
     if cached == "Murderer" then return "Murderer" end
     local c, bp = player.Character, player:FindFirstChild("Backpack")
     local hum = c and c:FindFirstChildOfClass("Humanoid")
     local alive = hum and hum.Health > 0
-    local hk, hg = false, false
-    local function chk(ct) if not ct then return end
-        for _, i in pairs(ct:GetChildren()) do if i:IsA("Tool") then
-            if i.Name == "Knife" or i:FindFirstChild("KnifeServer") then hk = true
-            elseif i.Name == "Gun" or i.Name == "Revolver" then hg = true end
-        end end
-    end
-    chk(c)
-    chk(bp)
+    local hk = (c and (c:FindFirstChild("Knife") or c:FindFirstChild("KnifeServer"))) or (bp and (bp:FindFirstChild("Knife") or bp:FindFirstChild("KnifeServer")))
     if hk then return "Murderer" end
-    -- Sheriff / Hero (only meaningful while alive, so a dead ex-holder never lingers).
-    -- The server role (RoleCache) is authoritative AND arrives as soon as roles are
-    -- assigned - so the Sheriff shows up immediately instead of only after they've
-    -- physically received the gun tool (that lag is what made them "appear late").
-    -- Gun possession is a backup for the brief window before the data poll catches up.
     if alive then
-        -- Sheriff: PREDICTED from the server role the moment roles are assigned — shown BEFORE the
-        -- round timer hands out the gun (no gun-possession requirement), so the cham appears early.
-        -- Only one server Sheriff, and death clears it via the alive check, so it never lingers.
-        -- BUT: once a Hero exists (Sheriff died & the dropped gun was grabbed), the Sheriff role is
-        -- defunct — never report anyone as Sheriff after that (requested: "if there's a Hero, no Sheriff").
         if cached == "Sheriff" and not HeroPresent then OriginalSheriff = player; return "Sheriff" end
-        -- Hero: an innocent holding the DROPPED gun. Must CURRENTLY hold it (hand/backpack) so that
-        -- ex-heroes who have since dropped it don't pile up (that was the "several heroes" bug).
+        local hg = (c and (c:FindFirstChild("Gun") or c:FindFirstChild("Revolver"))) or (bp and (bp:FindFirstChild("Gun") or bp:FindFirstChild("Revolver")))
         if hg then
             if cached == "Hero" then return "Hero" end
-            -- A Hero already exists this round, so any current gun holder is a Hero, never a Sheriff.
             if HeroPresent then return "Hero" end
-            -- No server role yet but holding a gun: first holder = Sheriff (backup for the predict
-            -- window), later pickups = Hero.
             if not OriginalSheriff or not OriginalSheriff.Parent then OriginalSheriff = player end
             return (OriginalSheriff == player) and "Sheriff" or "Hero"
         end
@@ -5130,18 +6297,22 @@ task.spawn(function()
     -- knife's stab window (Activate) and firing each knife handle's TouchInterest against every
     -- in-range target body part so the server registers the hit.
     while S.Gui and S.Gui.Parent do
-        if S.KnifeAura and firetouchinterest then
+        if S.KnifeAura then
             pcall(function()
                 local c = LP.Character
                 local myHrp = c and c:FindFirstChild("HumanoidRootPart")
                 local range = S.KnifeAuraRange or 15
 
-                -- Collect every knife we can hit with: { handle = Part, origin = Vector3, tool = knifeToolOrNil }
+                -- Collect knives we can hit with. The HELD knife also carries its Events.HandleTouched
+                -- remote — the SAME reliable server-side kill that Kill All uses. Thrown knives don't
+                -- have it, so they fall back to firetouchinterest.
                 local sources = {}
                 local heldKnife = c and c:FindFirstChild("Knife")
-                local heldHandle = heldKnife and heldKnife:FindFirstChild("Handle")
-                if heldKnife and heldHandle and myHrp then
-                    table.insert(sources, { handle = heldHandle, origin = myHrp.Position, tool = heldKnife })
+                if heldKnife and myHrp then
+                    local handle = heldKnife:FindFirstChild("Handle")
+                    local events = heldKnife:FindFirstChild("Events")
+                    local ht = events and events:FindFirstChild("HandleTouched")
+                    table.insert(sources, { handle = handle, origin = myHrp.Position, tool = heldKnife, remote = ht })
                 end
                 -- Thrown / dropped knives live as direct children of the workspace.
                 for _, v in ipairs(workspace:GetChildren()) do
@@ -5168,13 +6339,20 @@ task.spawn(function()
                     if #victims > 0 then
                         if src.tool then pcall(function() src.tool:Activate() end) end
                         for _, char in ipairs(victims) do
-                            for _, partName in ipairs(bodyParts) do
-                                local pt = char:FindFirstChild(partName)
-                                if pt then
-                                    pcall(function()
-                                        firetouchinterest(src.handle, pt, 0)
-                                        firetouchinterest(src.handle, pt, 1)
-                                    end)
+                            local vhrp = char:FindFirstChild("HumanoidRootPart")
+                            if src.remote and vhrp then
+                                -- Reliable MM2 kill: fire the knife's HandleTouched remote at the victim's HRP.
+                                pcall(function() src.remote:FireServer(vhrp) end)
+                            elseif firetouchinterest and src.handle then
+                                -- Fallback (thrown knife, or no remote): simulate a touch on each body part.
+                                for _, partName in ipairs(bodyParts) do
+                                    local pt = char:FindFirstChild(partName)
+                                    if pt then
+                                        pcall(function()
+                                            firetouchinterest(src.handle, pt, 0)
+                                            firetouchinterest(src.handle, pt, 1)
+                                        end)
+                                    end
                                 end
                             end
                         end
@@ -5197,7 +6375,9 @@ task.spawn(function()
                     pcall(function()
                         for _, player in pairs(Players:GetPlayers()) do
                             if player ~= LP and player.Character then
-                                for _, v in pairs(player.Character:GetDescendants()) do
+                                -- PERF: body parts (the ones that fling you) are DIRECT children;
+                                -- GetChildren avoids walking accessory handles/decals every frame.
+                                for _, v in pairs(player.Character:GetChildren()) do
                                     if v:IsA("BasePart") then
                                         v.CanCollide = false
                                     end
@@ -5230,20 +6410,25 @@ tc(RunService.RenderStepped:Connect(function()
             lastFpsT = now
             StatusFPS.Text = "FPS  "..curFPS
             StatusFPS.TextColor3 = curFPS >= 30 and T.Tx or T.Tx2
-            if fpsLbl and fpsLbl.Parent then
-                fpsLbl.Text = tostring(curFPS)
-                fpsLbl.TextColor3 = curFPS >= 30 and T.White or T.Tx2
+            if HUD.fpsLbl and HUD.fpsLbl.Parent then
+                HUD.fpsLbl.Text = tostring(curFPS)
+                HUD.fpsLbl.TextColor3 = curFPS >= 30 and T.White or T.Tx2
             end
         end
-        local myRole = getRole(LP)
-        StatusRole.Text = "ROLE  "..string.upper(myRole)
-        StatusRole.TextColor3 = RoleShade[myRole] or T.Tx3
-        pcall(function()
-            local perf = game:GetService("Stats"):FindFirstChild("PerformanceStats")
-            if perf then local ps = perf:FindFirstChild("Ping")
-                if ps then StatusPing.Text = "PING  "..math.floor(ps:GetValue()).."ms" end
-            end
-        end)
+        -- Role + ping labels don't need per-frame updates (getRole + Stats lookup every frame was
+        -- needless CPU); refresh them 4x/sec instead.
+        if now - lastStatusT >= 0.25 then
+            lastStatusT = now
+            local myRole = getRole(LP)
+            StatusRole.Text = "ROLE  "..string.upper(myRole)
+            StatusRole.TextColor3 = RoleShade[myRole] or T.Tx3
+            pcall(function()
+                local perf = game:GetService("Stats"):FindFirstChild("PerformanceStats")
+                if perf then local ps = perf:FindFirstChild("Ping")
+                    if ps then StatusPing.Text = "PING  "..math.floor(ps:GetValue()).."ms" end
+                end
+            end)
+        end
         local mc = LP.Character
         if mc then local h = mc:FindFirstChildOfClass("Humanoid")
             if h then
@@ -5282,8 +6467,7 @@ tc(RunService.RenderStepped:Connect(function()
                 end
             end
         end
-        if S.NoClip then local c = LP.Character; if c then
-            for _, pt in pairs(c:GetDescendants()) do if pt:IsA("BasePart") then pt.CanCollide = false end end end end
+        -- Noclip logic moved to RunService.Stepped connection for physics sync
         if S.Fly then local c = LP.Character; if c and c:FindFirstChild("HumanoidRootPart") then
             local hrp = c.HumanoidRootPart; local h = c:FindFirstChildOfClass("Humanoid")
             if not hrp:FindFirstChild("FlyBV") then
@@ -5319,6 +6503,17 @@ tc(RunService.RenderStepped:Connect(function()
             end
         end
 
+        -- PERF: skip this whole per-player loop (it calls getRole for EVERYONE every frame) unless at
+        -- least one cham / wall-detect toggle is on. When they all turn off we run ONE final pass to
+        -- clean up leftover highlights, then stop — a big CPU saving in the common (chams-off) case.
+        local anyCham = S.MurderChams or S.SheriffChams or S.HeroChams or S.InnocentChams or S.GunHeldChams
+        if anyCham or S._chamsWereOn then
+        -- PERF: chams don't need a per-frame refresh. Throttling to ~12x/sec means we're not running
+        -- getRole for EVERY player on EVERY frame — that per-frame role scan is the main CPU spike when
+        -- roles are handed out (which is exactly when the freeze happens). No visible difference.
+        if tick() - (S._chamsAt or 0) >= 0.08 then
+        S._chamsAt = tick()
+        S._chamsWereOn = anyCham
         for _, pl in pairs(Players:GetPlayers()) do if pl ~= LP and pl.Character then
             local ch = pl.Character; local role = getRole(pl)
             if role ~= "Murderer" then local x = ch:FindFirstChild("MurdChams"); if x then x:Destroy() end end
@@ -5338,90 +6533,83 @@ tc(RunService.RenderStepped:Connect(function()
                 if S.InnocentChams then if not ch:FindFirstChild("InnoChams") then createHighlight(ch, Color3.fromRGB(0,255,0), "InnoChams") end
                 else local x = ch:FindFirstChild("InnoChams"); if x then x:Destroy() end end
             end
-            if S.ChamsAll then
-                if not ch:FindFirstChild("AllChams") then createHighlight(ch, Color3.fromRGB(255,255,255), "AllChams") end
-            else local x = ch:FindFirstChild("AllChams"); if x then x:Destroy() end end
-            -- Wall Detect: one AlwaysOnTop highlight per player (always visible through walls),
-            -- coloured by ROLE (Murderer red, Sheriff blue, Hero yellow, Innocent green). A
-            -- line-of-sight raycast from the camera to the player decides BRIGHTNESS every frame:
-            -- clear ray = full-bright role colour (exposed / peeking); wall in the way = the same
-            -- colour darkened toward black (behind cover). Re-evaluated each frame, so stepping out
-            -- from behind a wall snaps it straight back to bright.
-            -- (A per-part two-highlight Occluded+AlwaysOnTop version was tried but on this engine the
-            -- AlwaysOnTop layer always draws over the Occluded one, so visible parts stayed dark and
-            -- never reverted -- Roblox has no "occluded-only" DepthMode to do true per-part.)
-            if S.WallDetectChams then
-                -- clean up any leftovers from the old two-highlight version
-                local ov = ch:FindFirstChild("WallDetVis"); if ov then ov:Destroy() end
-                local oh = ch:FindFirstChild("WallDetHid"); if oh then oh:Destroy() end
-                local base
-                if role == "Murderer" then base = Color3.fromRGB(255, 45, 45)
-                elseif role == "Sheriff" then base = Color3.fromRGB(50, 120, 255)
-                elseif role == "Hero" then base = Color3.fromRGB(255, 225, 60)
-                else base = Color3.fromRGB(70, 235, 110) end
-                local hl = ch:FindFirstChild("WallDetect")
-                if not hl then
-                    hl = Instance.new("Highlight")
-                    hl.Name = "WallDetect"
-                    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                    hl.OutlineTransparency = 0
-                    hl.Adornee = ch
-                    hl.Parent = ch
-                end
-                local cam = workspace.CurrentCamera
-                local part = ch:FindFirstChild("Head") or ch:FindFirstChild("HumanoidRootPart")
-                local occluded = false
-                if cam and part then
-                    local origin = cam.CFrame.Position
-                    local rp = RaycastParams.new()
-                    rp.FilterType = Enum.RaycastFilterType.Exclude
-                    rp.FilterDescendantsInstances = { ch, LP.Character }
-                    rp.IgnoreWater = true
-                    local res = workspace:Raycast(origin, part.Position - origin, rp)
-                    occluded = res ~= nil
-                end
-                if occluded then
-                    hl.FillColor = base:Lerp(Color3.new(0, 0, 0), 0.62)   -- behind a wall: darkened
-                    hl.OutlineColor = base:Lerp(Color3.new(0, 0, 0), 0.3)
-                    hl.FillTransparency = 0.25
+            -- Gun chams: highlight the held Gun/Revolver so the pistol shows through walls. A Highlight
+            -- only adorns a Model/BasePart, so we target the tool's Handle (or its first BasePart).
+            local gunTool = ch:FindFirstChild("Gun") or ch:FindFirstChild("Revolver")
+            local gunPart = gunTool and (gunTool:FindFirstChild("Handle") or gunTool:FindFirstChildWhichIsA("BasePart"))
+            if gunPart then
+                if S.GunHeldChams then
+                    if not gunPart:FindFirstChild("GunHeldChams") then createHighlight(gunPart, Color3.fromRGB(255,128,0), "GunHeldChams") end
                 else
-                    hl.FillColor = base                                    -- visible: full role colour
-                    hl.OutlineColor = base
-                    hl.FillTransparency = 0.5
+                    local x = gunPart:FindFirstChild("GunHeldChams"); if x then x:Destroy() end
                 end
-            else
-                local a = ch:FindFirstChild("WallDetVis"); if a then a:Destroy() end
-                local b = ch:FindFirstChild("WallDetHid"); if b then b:Destroy() end
-                local d = ch:FindFirstChild("WallDetect"); if d then d:Destroy() end
             end
-            -- Live-apply Chams Opacity / Visible Only to highlights that already exist, so the
-            -- sliders take effect immediately instead of only on the next role change.
+            -- Live-apply Chams Opacity to highlights that already exist, so the slider takes effect
+            -- immediately instead of only on the next role change.
             for _, x in ipairs(ch:GetChildren()) do
                 if x:IsA("Highlight") and string.find(x.Name, "Chams", 1, true) then
                     x.FillTransparency = 1 - (S.ChamsOpacity or 50) / 100
-                    x.DepthMode = S.ChamsVisibleCheck and Enum.HighlightDepthMode.Occluded or Enum.HighlightDepthMode.AlwaysOnTop
                 end
             end
         end end
-        local gd = workspace:FindFirstChild("GunDrop") or workspace:FindFirstChild("GunDrop", true)
-        if gd then
-            if S.AutoGrabGun then local n = tick(); if not S.LastGrab or n - S.LastGrab > 1 then S.LastGrab = n; grabGun() end end
-            if S.GunChams then
-                createCham(gd, Color3.fromRGB(255, 128, 0), "GunDropChams")
-            else
-                removeCham(gd, "GunDropChams")
-            end
-        end
-        for _, v in pairs(workspace:GetChildren()) do
-            if v.Name == "Knife" or v.Name == "NormalKnife" or v.Name == "ThrowingKnife" then
-                if S.KnifeChams then
-                    createCham(v, Color3.fromRGB(255, 0, 0), "KnifeChams")
-                else
-                    removeCham(v, "KnifeChams")
+        end -- close the ~12x/sec throttle
+        end -- close the "anyCham or S._chamsWereOn" gate
+        -- PERF: throttle the GunDrop lookup to avoid recursive workspace scans every single frame.
+        if S.AutoGrabGun or S.GunChams or S.GunHeldChams then
+            local now = tick()
+            if now - (S._lastGunDropScan or 0) >= 0.25 then
+                S._lastGunDropScan = now
+                local gd = workspace:FindFirstChild("GunDrop")
+                if not gd then
+                    gd = workspace:FindFirstChild("GunDrop", true)
                 end
+                S._cachedGunDrop = gd
+            end
+            local gd = S._cachedGunDrop
+            if gd and gd.Parent then
+                if S.AutoGrabGun then
+                    local n = tick()
+                    if not S.LastGrab or n - S.LastGrab > 1 then
+                        S.LastGrab = n
+                        grabGun()
+                    end
+                end
+                if S.GunChams or S.GunHeldChams then
+                    createCham(gd, Color3.fromRGB(255, 128, 0), "GunDropChams")
+                else
+                    removeCham(gd, "GunDropChams")
+                end
+            else
+                if S._hadGunDrop then
+                    S._hadGunDrop = false
+                    removeCham(gd, "GunDropChams")
+                end
+            end
+            if gd and gd.Parent then
+                S._hadGunDrop = true
             end
         end
     end)
+end))
+tc(RunService.Stepped:Connect(function()
+    if S.NoClip or S.FastAutofarm then
+        local c = LP.Character
+        if c then
+            local hum = c:FindFirstChildOfClass("Humanoid")
+            if hum then hum.PlatformStand = true end
+            if c ~= S._ncChar or (tick() - (S._ncAt or 0)) > 2 then
+                S._ncChar = c; S._ncAt = tick(); S._ncParts = {}
+                for _, pt in ipairs(c:GetDescendants()) do if pt:IsA("BasePart") then table.insert(S._ncParts, pt) end end
+            end
+            for _, pt in ipairs(S._ncParts) do if pt.Parent then pt.CanCollide = false end end
+        end
+    else
+        local c = LP.Character
+        local hum = c and c:FindFirstChildOfClass("Humanoid")
+        if hum and hum.PlatformStand then
+            hum.PlatformStand = false
+        end
+    end
 end))
 -- ============ ESP SYSTEM (names / distance / role / health / box / tracers) ============
 local ESPGui = Instance.new("ScreenGui")
@@ -5510,15 +6698,19 @@ local function removeESP(plr)
     end
 end
 tc(Players.PlayerRemoving:Connect(function(p) removeESP(p) end))
+local espWasActive = false
 tc(RunService.RenderStepped:Connect(function()
     local espOn = S.NameESP or S.DistanceESP or S.RoleESP or S.HealthESP or S.BoxESP or S.TracerESP or S.HeadDot
     if not espOn then
-        -- Hide any objects we already made and skip creating new ones
-        for _, o in pairs(ESPObjects) do
-            o.box.Visible = false; o.hbBack.Visible = false; o.tracer.Visible = false; o.dot.Visible = false; o.bill.Enabled = false
+        if espWasActive then
+            for _, o in pairs(ESPObjects) do
+                o.box.Visible = false; o.hbBack.Visible = false; o.tracer.Visible = false; o.dot.Visible = false; o.bill.Enabled = false
+            end
+            espWasActive = false
         end
         return
     end
+    espWasActive = true
     local cam = workspace.CurrentCamera
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LP then
@@ -5536,7 +6728,7 @@ tc(RunService.RenderStepped:Connect(function()
             end
             if show then
                 local role = "Innocent"
-                pcall(function() role = getRole(plr) end)
+                role = getRole(plr)
                 local col = RoleColorOf[role] or Color3.fromRGB(235, 235, 235)
                 local topP = cam:WorldToViewportPoint(head.Position + Vector3.new(0, 1.5, 0))
                 local botP = cam:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0))
@@ -5632,7 +6824,7 @@ rebuildCrosshair = function()
     end
     
     Crosshair.Visible = true
-    UIS.MouseIconEnabled = not S.HideRealCursor
+    UIS.MouseIconEnabled = true
     
     local shape = S.CrosshairShape or "Cross"
     local color = Color3.fromRGB(0, 255, 130)
@@ -5991,6 +7183,52 @@ do
 end
 tc(UIS.InputBegan:Connect(function(input, processed)
     if processed then return end
+    if UIS:GetFocusedTextBox() then return end
+    
+    local isTouch = (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch)
+    if isTouch then
+        local mouse = LP:GetMouse()
+        if S._mobileTPActive and mouse and mouse.Hit then
+            local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                hrp.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0, 3, 0))
+                Notify("Click TP", "Teleported", 1.5)
+                S._mobileTPActive = false
+                local tpBtn = SG:FindFirstChild("MobileHUD") and SG.MobileHUD:FindFirstChild("TP")
+                if tpBtn then
+                    tpBtn.BackgroundColor3 = T.Elev; pcall(function() tpBtn:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
+                    tpBtn.TextColor3 = T.White; pcall(function() tpBtn:SetAttribute("ThemeColorRole_TextColor3", "White") end)
+                    tpBtn:SetAttribute("Active", false)
+                end
+            end
+        end
+        
+        if S._mobileFlingActive and mouse and mouse.Target then
+            local target = mouse.Target
+            local parent = target.Parent
+            local p
+            while parent and parent ~= workspace do
+                p = Players:GetPlayerFromCharacter(parent)
+                if p then break end
+                parent = parent.Parent
+            end
+            if p and p ~= LP and not isWhitelisted(p) then
+                local th = p.Character and p.Character:FindFirstChildOfClass("Humanoid")
+                if th and th.Health > 0 then
+                    Notify("Click Fling", "Flinging " .. p.Name, 2)
+                    task.spawn(function() pcall(skidFling, p) end)
+                    S._mobileFlingActive = false
+                    local flingBtn = SG:FindFirstChild("MobileHUD") and SG.MobileHUD:FindFirstChild("Fling")
+                    if flingBtn then
+                        flingBtn.BackgroundColor3 = T.Elev; pcall(function() flingBtn:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
+                        flingBtn.TextColor3 = T.White; pcall(function() flingBtn:SetAttribute("ThemeColorRole_TextColor3", "White") end)
+                        flingBtn:SetAttribute("Active", false)
+                    end
+                end
+            end
+        end
+    end
+    
     if S.ClickTP and input.KeyCode == Enum.KeyCode.E then
         local c = LP.Character
         local hrp = c and c:FindFirstChild("HumanoidRootPart")
@@ -5998,6 +7236,29 @@ tc(UIS.InputBegan:Connect(function(input, processed)
         if hrp and mouse and mouse.Hit then
             hrp.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0, 3, 0))
             Notify("Click TP", "Teleported", 1.5)
+        end
+    end
+    
+    if S.ClickFling and input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if not S._mobileFlingActive then
+            local mouse = LP:GetMouse()
+            local target = mouse and mouse.Target
+            if target then
+                local parent = target.Parent
+                local p
+                while parent and parent ~= workspace do
+                    p = Players:GetPlayerFromCharacter(parent)
+                    if p then break end
+                    parent = parent.Parent
+                end
+                if p and p ~= LP and not isWhitelisted(p) then
+                    local th = p.Character and p.Character:FindFirstChildOfClass("Humanoid")
+                    if th and th.Health > 0 then
+                        Notify("Click Fling", "Flinging " .. p.Name, 2)
+                        task.spawn(function() pcall(skidFling, p) end)
+                    end
+                end
+            end
         end
     end
 end))
@@ -6013,18 +7274,18 @@ task.spawn(function()
                 if ping == 0 and Stats then
                     pcall(function() ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
                 end
-                pingLbl.Text = ping .. " ms"
+                HUD.pingLbl.Text = ping .. " ms"
             end
             if S.HUD_Coords then
                 local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
                 if hrp then
                     local p = hrp.Position
-                    coordLbl.Text = string.format("X  %d\nY  %d\nZ  %d", p.X, p.Y, p.Z)
+                    HUD.coordLbl.Text = string.format("X  %d\nY  %d\nZ  %d", p.X, p.Y, p.Z)
                 end
             end
-            if S.HUD_Time then timeLbl.Text = os.date("%H:%M:%S") end
+            if S.HUD_Time then HUD.timeLbl.Text = os.date("%H:%M:%S") end
             if S.HUD_Players then
-                playersLbl.Text = #Players:GetPlayers() .. " / " .. Players.MaxPlayers .. " players"
+                HUD.playersLbl.Text = #Players:GetPlayers() .. " / " .. Players.MaxPlayers .. " players"
             end
             if S.HUD_Watermark then
                 local wping = 0
@@ -6037,19 +7298,19 @@ task.spawn(function()
                 local pcol = wping < 90 and "#7ee787" or (wping < 180 and "#e3b341" or "#ff7b72")
                 local fcol = curFPS >= 50 and "#7ee787" or (curFPS >= 30 and "#e3b341" or "#ff7b72")
                 local sep = '<font color="#333333"> | </font>'
-                watermarkLbl.Text = string.format(
-                    '<b>MM2</b>%s<font color="#d0d0d0">%s</font>%s<font color="%s">%d ms</font>%s<font color="%s">%d fps</font>%s<font color="#b78bff">%s</font>',
+                HUD.watermarkLbl.Text = string.format(
+                    '<font color="#ffffff"><b>Inertia</b></font>%s<font color="#d0d0d0">%s</font>%s<font color="%s">%d ms</font>%s<font color="%s">%d fps</font>%s<font color="#b78bff">%s</font>',
                     sep, LP.Name, sep, pcol, wping, sep, fcol, curFPS, sep, sess)
             end
             if S.HUD_Speed then
                 local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
                 local sp = 0
                 if hrp then local v = hrp.AssemblyLinearVelocity; sp = math.floor(Vector3.new(v.X, 0, v.Z).Magnitude) end
-                speedLbl.Text = sp .. " sps"
+                HUD.speedLbl.Text = sp .. " sps"
             end
             if S.HUD_Session then
                 local el = os.time() - scriptStart
-                sessionLbl.Text = string.format("%02d:%02d:%02d", math.floor(el/3600), math.floor((el%3600)/60), el%60)
+                HUD.sessionLbl.Text = string.format("%02d:%02d:%02d", math.floor(el/3600), math.floor((el%3600)/60), el%60)
             end
         end)
         task.wait(0.25)
@@ -6057,34 +7318,76 @@ task.spawn(function()
 end)
 
 
+-- Draws a small state glyph out of rotated bars (NO emoji): a green check when a bound toggle is ON,
+-- a red X when it's OFF. Used in the Keybinds HUD.
+local function drawStateIcon(parent, on, z)
+    local box = Instance.new("Frame")
+    box.BackgroundTransparency = 1
+    box.Size = UDim2.fromOffset(14, 14)
+    box.ZIndex = z
+    box.Parent = parent
+    local col = on and Color3.fromRGB(85, 220, 120) or Color3.fromRGB(235, 85, 85)
+    local function seg(len, rot, ox, oy)
+        local s = Instance.new("Frame")
+        s.AnchorPoint = Vector2.new(0.5, 0.5)
+        s.Position = UDim2.new(0.5, ox, 0.5, oy)
+        s.Size = UDim2.fromOffset(2, len)
+        s.BackgroundColor3 = col
+        s.BorderSizePixel = 0
+        s.Rotation = rot
+        s.ZIndex = z
+        Corner(s, 1)
+        s.Parent = box
+    end
+    if on then
+        seg(7, -26, -3, 0)   -- short arm: upper-left down to the vertex
+        seg(11, 45, 2, -1)   -- long arm: vertex up to the upper-right
+    else
+        seg(13, 45, 0, 0)    -- two crossing diagonals form the X
+        seg(13, -45, 0, 0)
+    end
+    return box
+end
 task.spawn(function() while S.Gui and S.Gui.Parent do
-    if S.HUD_Roles and hRoles.content and hRoles.content.Parent then
-        for _, ch in pairs(hRoles.content:GetChildren()) do if ch:IsA("TextLabel") then ch:Destroy() end end
-        local o = 0
+    if S.HUD_Roles and HUD.hRoles.content and HUD.hRoles.content.Parent then
+        for _, ch in pairs(HUD.hRoles.content:GetChildren()) do if ch:IsA("TextLabel") then ch:Destroy() end end
+        local TS = game:GetService("TextService")
+        local o, maxW = 0, 0
         for _, p in pairs(Players:GetPlayers()) do o = o + 1; local r = getRole(p)
             local l = Instance.new("TextLabel"); l.Name = p.Name; l.LayoutOrder = o; l.BackgroundTransparency = 1
             l.Size = UDim2.new(1,0,0,20); l.Font = (r == "Murderer") and FM or F; l.TextSize = 15
             l.TextColor3 = RoleShade[r] or T.Tx3
             l.TextXAlignment = Enum.TextXAlignment.Left; l.Text = p.Name.."  -  "..r; l.ZIndex = 851
-            l.TextTruncate = Enum.TextTruncate.AtEnd; l.Parent = hRoles.content
+            l.TextTruncate = Enum.TextTruncate.AtEnd; l.Parent = HUD.hRoles.content
+            -- Measure the full (untruncated) line so we can size the panel to fit it.
+            local ok, sz = pcall(function() return TS:GetTextSize(l.Text, l.TextSize, l.Font, Vector2.new(9999, 100)) end)
+            if ok and sz.X > maxW then maxW = sz.X end
         end
-        hRoles.frame.Size = UDim2.new(hRoles.frame.Size.X.Scale, hRoles.frame.Size.X.Offset, 0, 32 + (o * 22))
+        -- Auto-fit width to the widest "name  -  role" line so nothing gets cut to "...".
+        -- +28 covers the content inset (~18px) plus a little right margin; clamped 260..560.
+        local newW = math.clamp(math.ceil(maxW) + 28, 260, 560)
+        HUD.hRoles.frame.Size = UDim2.new(0, newW, 0, 32 + (o * 22))
     end
-    if S.HUD_Keybinds and hBinds.content and hBinds.content.Parent then
-        for _, ch in pairs(hBinds.content:GetChildren()) do if ch:IsA("TextLabel") then ch:Destroy() end end
+    if S.HUD_Keybinds and HUD.hBinds.content and HUD.hBinds.content.Parent then
+        for _, ch in pairs(HUD.hBinds.content:GetChildren()) do if not ch:IsA("UIListLayout") then ch:Destroy() end end
         local o = 0
         for _, e in ipairs(AllBinds) do if e.bindKey then o = o + 1
-            local l = Instance.new("TextLabel"); l.LayoutOrder = o; l.BackgroundTransparency = 1
-            l.Size = UDim2.new(1,0,0,20); l.Font = F; l.TextSize = 15; l.TextColor3 = T.Tx
+            local row = Instance.new("Frame")
+            row.LayoutOrder = o; row.BackgroundTransparency = 1
+            row.Size = UDim2.new(1,0,0,20); row.ZIndex = 852; row.Parent = HUD.hBinds.content
+            -- Toggle binds show a check/X for their state; action binds (momentary) leave the slot empty.
+            local l = Instance.new("TextLabel"); l.BackgroundTransparency = 1
+            l.Position = UDim2.new(0, 2, 0, 0); l.Size = UDim2.new(1, -2, 1, 0)
+            l.Font = F; l.TextSize = 15; l.TextColor3 = T.Tx; pcall(function() l:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
             l.TextXAlignment = Enum.TextXAlignment.Left; l.Text = "[ "..e.bindKey.Name.." ]  "..e.label
-            l.TextTruncate = Enum.TextTruncate.AtEnd; l.ZIndex = 852; l.Parent = hBinds.content
+            l.TextTruncate = Enum.TextTruncate.AtEnd; l.ZIndex = 852; l.Parent = row
         end end
         if o == 0 then local l = Instance.new("TextLabel"); l.BackgroundTransparency = 1
-            l.Size = UDim2.new(1,0,0,20); l.Font = F; l.TextSize = 15; l.TextColor3 = T.Tx3
-            l.TextXAlignment = Enum.TextXAlignment.Left; l.Text = "No binds set"; l.ZIndex = 852; l.Parent = hBinds.content end
-        hBinds.frame.Size = UDim2.new(hBinds.frame.Size.X.Scale, hBinds.frame.Size.X.Offset, 0, 32 + (math.max(o, 1) * 22))
+            l.Size = UDim2.new(1,0,0,20); l.Font = F; l.TextSize = 15; l.TextColor3 = T.Tx3; pcall(function() l:SetAttribute("ThemeColorRole_TextColor3", "Tx3") end)
+            l.TextXAlignment = Enum.TextXAlignment.Left; l.Text = "No binds set"; l.ZIndex = 852; l.Parent = HUD.hBinds.content end
+        HUD.hBinds.frame.Size = UDim2.new(HUD.hBinds.frame.Size.X.Scale, HUD.hBinds.frame.Size.X.Offset, 0, 32 + (math.max(o, 1) * 22))
     end
-    if S.HUD_GunStatus and gunLbl and gunLbl.Parent then
+    if S.HUD_GunStatus and HUD.gunLbl and HUD.gunLbl.Parent then
         local gd = workspace:FindFirstChild("GunDrop") or workspace:FindFirstChild("GunDrop", true)
         local c = LP.Character; local bp = LP:FindFirstChild("Backpack"); local hg = false
         if (c and (c:FindFirstChild("Gun") or c:FindFirstChild("Revolver"))) or (bp and (bp:FindFirstChild("Gun") or bp:FindFirstChild("Revolver"))) then hg = true end
@@ -6093,7 +7396,7 @@ task.spawn(function() while S.Gui and S.Gui.Parent do
         local sn = "?"
         for _, p in pairs(Players:GetPlayers()) do local r = getRole(p); if r == "Sheriff" or r == "Hero" then sn = p.Name; break end end
         table.insert(lines, "Sheriff: "..sn)
-        gunLbl.Text = table.concat(lines, "\n")
+        HUD.gunLbl.Text = table.concat(lines, "\n")
     end
     task.wait(0.5) end end)
 do
@@ -6102,186 +7405,248 @@ do
     L.Parent = SG
     L.AnchorPoint = Vector2.new(0.5, 0.5)
     L.Position = UDim2.new(0.5, 0, 0.5, 0)
-    L.Size = UDim2.fromOffset(360, 180)
-    L.BackgroundColor3 = T.BG
+    L.Size = UDim2.fromOffset(0, 0)
+    L.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+    L.BackgroundTransparency = 0.1
     L.BorderSizePixel = 0
     L.ZIndex = 500
     L.ClipsDescendants = true
-    Corner(L, 14)
-    Stroke(L, T.Bd2, 1, 0.2)
-    Shadow(L, 0.3)
-    Grad(L, Color3.fromRGB(12, 12, 12), Color3.fromRGB(3, 3, 3), 90)
-    local la = Instance.new("Frame")
-    la.Parent = L
-    la.Size = UDim2.new(1, 0, 0, 1)
-    la.BackgroundColor3 = T.White
-    la.BackgroundTransparency = 0.55
-    la.BorderSizePixel = 0
-    la.ZIndex = 501
+    Corner(L, 16)
+    local lSt = Stroke(L, Color3.fromRGB(60, 60, 65), 1.5, 0.6)
+    Shadow(L, 0.5)
+    Grad(L, Color3.fromRGB(15, 15, 20), Color3.fromRGB(4, 4, 6), 90)
+
+    local glow = Instance.new("Frame")
+    glow.Parent = L
+    glow.Size = UDim2.new(1, 4, 1, 4)
+    glow.Position = UDim2.new(0, -2, 0, -2)
+    glow.BackgroundTransparency = 1
+    Corner(glow, 16)
+    local glowSt = Stroke(glow, Color3.fromRGB(100, 100, 105), 2.5, 0.8)
+    glow.ZIndex = 501
+
     local lt = Instance.new("TextLabel")
     lt.Parent = L
     lt.BackgroundTransparency = 1
     lt.Position = UDim2.new(0, 0, 0.12, 0)
-    lt.Size = UDim2.new(1, 0, 0.22, 0)
+    lt.Size = UDim2.new(1, 0, 0.25, 0)
     lt.Font = FB
-    lt.Text = "MM2"
-    lt.TextColor3 = T.White
-    lt.TextScaled = true
-    lt.ZIndex = 501
-    Grad(lt, T.White, Color3.fromRGB(100, 100, 100), 90)
+    lt.Text = "INERTIA"
+    lt.TextSize = 34
+    lt.TextColor3 = T.White; pcall(function() lt:SetAttribute("ThemeColorRole_TextColor3", "White") end)
+    lt.ZIndex = 502
+    local ltGrad = Grad(lt, Color3.fromRGB(255, 255, 255), Color3.fromRGB(130, 130, 130), 45)
+
     local ls = Instance.new("TextLabel")
     ls.Parent = L
     ls.BackgroundTransparency = 1
-    ls.Position = UDim2.new(0, 0, 0.40, 0)
+    ls.Position = UDim2.new(0, 0, 0.44, 0)
     ls.Size = UDim2.new(1, 0, 0.1, 0)
     ls.Font = F
-    ls.Text = "init..."
-    ls.TextColor3 = T.Tx3
-    ls.TextScaled = true
-    ls.ZIndex = 501
+    ls.Text = "initializing systems..."
+    ls.TextSize = 13
+    ls.TextColor3 = Color3.fromRGB(150, 150, 160)
+    ls.ZIndex = 502
+
     local lbb = Instance.new("Frame")
     lbb.Parent = L
     lbb.AnchorPoint = Vector2.new(0.5, 0.5)
-    lbb.Position = UDim2.new(0.5, 0, 0.65, 0)
-    lbb.Size = UDim2.new(0.72, 0, 0, 5)
-    lbb.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    lbb.Position = UDim2.new(0.5, 0, 0.68, 0)
+    lbb.Size = UDim2.new(0.75, 0, 0, 6)
+    lbb.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
     lbb.BorderSizePixel = 0
-    lbb.ZIndex = 501
-    Corner(lbb, 8)
+    lbb.ZIndex = 502
+    Corner(lbb, 3)
+    Stroke(lbb, Color3.fromRGB(30, 30, 40), 1, 0.5)
+
     local lbf = Instance.new("Frame")
     lbf.Parent = lbb
     lbf.Size = UDim2.new(0, 0, 1, 0)
-    lbf.BackgroundColor3 = T.White
+    lbf.BackgroundColor3 = T.White; pcall(function() lbf:SetAttribute("ThemeColorRole_BackgroundColor3", "White") end)
     lbf.BorderSizePixel = 0
-    lbf.ZIndex = 502
-    Corner(lbf, 8)
+    lbf.ZIndex = 503
+    Corner(lbf, 3)
+    Grad(lbf, Color3.fromRGB(255, 255, 255), Color3.fromRGB(100, 100, 105), 0)
+
     local lp = Instance.new("TextLabel")
     lp.Parent = L
     lp.BackgroundTransparency = 1
-    lp.Position = UDim2.new(0, 0, 0.76, 0)
+    lp.Position = UDim2.new(0, 0, 0.78, 0)
     lp.Size = UDim2.new(1, 0, 0.12, 0)
     lp.Font = FM
     lp.Text = "0%"
-    lp.TextColor3 = T.Tx3
-    lp.TextScaled = true
-    lp.ZIndex = 501
+    lp.TextSize = 14
+    lp.TextColor3 = Color3.fromRGB(240, 240, 240)
+    lp.ZIndex = 502
+
+    TweenService:Create(L, TweenInfo.new(0.8, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Size = UDim2.fromOffset(380, 200)
+    }):Play()
+
+    task.spawn(function()
+        while L and L.Parent do
+            local t = tick()
+            ltGrad.Rotation = (t * 50) % 360
+            glowSt.Transparency = 0.5 + 0.3 * math.sin(t * 3.5)
+            lSt.Transparency = 0.4 + 0.2 * math.cos(t * 3.5)
+            task.wait()
+        end
+    end)
+
     task.spawn(function()
         local stages = {
-            {0.18, "connecting modules"},
+            {0.18, "connecting secure modules"},
             {0.38, "loading role tracker"},
-            {0.56, "building interface"},
-            {0.74, "initializing HUD"},
-            {0.90, "linking events"},
-            {1.00, "ready"},
+            {0.56, "injecting visual components"},
+            {0.74, "initializing hud stats"},
+            {0.90, "linking network events"},
+            {1.00, "client ready"},
         }
         local cur = 0
         for _, st in ipairs(stages) do
             ls.Text = st[2]
-            TweenService:Create(lbf, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
+            TweenService:Create(lbf, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {
                 Size = UDim2.new(st[1], 0, 1, 0)
             }):Play()
             local tgt = math.floor(st[1]*100)
             while cur < tgt do
                 cur = cur + 1
                 lp.Text = cur.."%"
-                task.wait(0.004)
+                task.wait(0.005)
             end
-            task.wait(0.08)
+            task.wait(0.1)
         end
-        task.wait(0.15)
+        task.wait(0.2)
         for _, o in ipairs(L:GetDescendants()) do
             if o:IsA("TextLabel") then
-                TweenService:Create(o, TweenInfo.new(0.2), { TextTransparency = 1 }):Play()
+                TweenService:Create(o, TweenInfo.new(0.25), { TextTransparency = 1 }):Play()
             elseif o:IsA("Frame") then
-                TweenService:Create(o, TweenInfo.new(0.2), { BackgroundTransparency = 1 }):Play()
+                TweenService:Create(o, TweenInfo.new(0.25), { BackgroundTransparency = 1 }):Play()
             elseif o:IsA("UIStroke") then
-                TweenService:Create(o, TweenInfo.new(0.2), { Transparency = 1 }):Play()
+                TweenService:Create(o, TweenInfo.new(0.25), { Transparency = 1 }):Play()
             end
         end
-        TweenService:Create(L, TweenInfo.new(0.2), { BackgroundTransparency = 1 }):Play()
-        task.wait(0.22)
+        TweenService:Create(L, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+            Size = UDim2.fromOffset(0, 0),
+            BackgroundTransparency = 1
+        }):Play()
+        task.wait(0.38)
         L:Destroy()
         Main.Visible = true
         local fw, fh = expandedSize.X.Offset, expandedSize.Y.Offset
-        Main.Size = UDim2.fromOffset(math.floor(fw*0.88), math.floor(fh*0.88))
-        TweenService:Create(Main, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Main.Size = UDim2.fromOffset(math.floor(fw*0.80), math.floor(fh*0.80))
+        TweenService:Create(Main, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
             Size = expandedSize
         }):Play()
         SFX.Ready()
         pcall(function() rebuildCrosshair() end)
-        Notify("MM2", "LCtrl = menu | RMB = bind", 4)
+        Notify("Inertia", "LCtrl = menu | RMB = bind", 4)
     end)
     -- ============ SOCIAL & HUD (KILL FEED & AUTO GG) ============
-    local killFeedFrame = Instance.new("Frame")
-    killFeedFrame.Name = "MM2_KillFeed"
-    killFeedFrame.Parent = SG
-    killFeedFrame.Position = UDim2.new(1, -260, 0, 80)
-    killFeedFrame.Size = UDim2.new(0, 240, 0, 300)
-    killFeedFrame.BackgroundTransparency = 1
-    killFeedFrame.ZIndex = 800
-    
-    local killFeedLayout = Instance.new("UIListLayout")
-    killFeedLayout.Parent = killFeedFrame
-    killFeedLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    killFeedLayout.Padding = UDim.new(0, 4)
-    
-    local function addKillFeed(msg, color)
+    -- Kill Feed is a proper HUD panel (draggable + toggled from the HUD tab). Cards are inserted into
+    -- the "Kill Feed" HUD's content frame; a role-coloured accent bar replaces the old emojis.
+    local kfContent = HUDEls["Kill Feed"].content
+    local kfCards, kfOrder = {}, 0
+    local function addKillFeed(name, tag, color)
+        color = color or Color3.new(1, 1, 1)
+        kfOrder = kfOrder + 1
+        -- Size the card to fit the name so long nicks aren't cut to "..." (12 left pad + name + 8 gap
+        -- + 60 tag + 12 right pad). Clamped so it never gets silly-wide; cards right-align, so wider
+        -- ones just extend further left.
+        local nameW = 100
+        pcall(function()
+            nameW = game:GetService("TextService"):GetTextSize(name, 14, FM, Vector2.new(9999, 100)).X
+        end)
+        local cardW = math.clamp(math.ceil(nameW) + 92, 170, 300)
         local card = Instance.new("Frame")
-        card.Size = UDim2.new(1, 0, 0, 24)
-        card.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-        card.BackgroundTransparency = 0.3
+        card.Size = UDim2.new(0, cardW, 0, 28)
+        card.BackgroundColor3 = Color3.fromRGB(15, 15, 19)
+        card.BackgroundTransparency = 1          -- fade in from invisible
         card.BorderSizePixel = 0
-        card.ZIndex = 801
-        
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0, 4)
-        corner.Parent = card
-        
-        local txt = Instance.new("TextLabel")
-        txt.Parent = card
-        txt.Size = UDim2.new(1, -8, 1, 0)
-        txt.Position = UDim2.new(0, 4, 0, 0)
-        txt.BackgroundTransparency = 1
-        txt.Font = Enum.Font.SourceSansSemibold
-        txt.TextSize = 13
-        txt.TextColor3 = color or Color3.new(1, 1, 1)
-        txt.TextXAlignment = Enum.TextXAlignment.Left
-        txt.Text = msg
-        txt.ZIndex = 802
-        
-        card.Parent = killFeedFrame
-        
+        card.LayoutOrder = -kfOrder               -- newest card sits on top
+        card.ZIndex = 866
+        card.Parent = kfContent
+        Corner(card, 6)
+        local st = Stroke(card, color, 1, 1)      -- coloured edge, starts transparent
+        local bar = Instance.new("Frame")
+        bar.Parent = card
+        bar.BackgroundColor3 = color
+        bar.BackgroundTransparency = 1
+        bar.BorderSizePixel = 0
+        bar.AnchorPoint = Vector2.new(0, 0.5)
+        bar.Position = UDim2.new(0, 0, 0.5, 0)
+        bar.Size = UDim2.new(0, 3, 0, 18)
+        bar.ZIndex = 867
+        Corner(bar, 2)
+        local nameL = Instance.new("TextLabel")
+        nameL.Parent = card
+        nameL.BackgroundTransparency = 1
+        nameL.Position = UDim2.new(0, 12, 0, 0)
+        nameL.Size = UDim2.new(1, -84, 1, 0)
+        nameL.Font = FM
+        nameL.TextSize = 14
+        nameL.TextColor3 = Color3.fromRGB(240, 240, 245)
+        nameL.TextTransparency = 1
+        nameL.TextXAlignment = Enum.TextXAlignment.Left
+        nameL.TextTruncate = Enum.TextTruncate.AtEnd
+        nameL.Text = name
+        nameL.ZIndex = 867
+        local tagL = Instance.new("TextLabel")
+        tagL.Parent = card
+        tagL.BackgroundTransparency = 1
+        tagL.AnchorPoint = Vector2.new(1, 0)
+        tagL.Position = UDim2.new(1, -12, 0, 0)
+        tagL.Size = UDim2.new(0, 60, 1, 0)
+        tagL.Font = FB
+        tagL.TextSize = 12
+        tagL.TextColor3 = color
+        tagL.TextTransparency = 1
+        tagL.TextXAlignment = Enum.TextXAlignment.Right
+        tagL.Text = tag
+        tagL.ZIndex = 867
+        table.insert(kfCards, card)
+        while #kfCards > 6 do  -- keep only the most recent
+            local old = table.remove(kfCards, 1)
+            if old then pcall(function() old:Destroy() end) end
+        end
+        -- Fade in
+        local ti = TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        pcall(function()
+            TweenService:Create(card, ti, { BackgroundTransparency = 0.08 }):Play()
+            if st then TweenService:Create(st, ti, { Transparency = 0.5 }):Play() end
+            TweenService:Create(bar, ti, { BackgroundTransparency = 0 }):Play()
+            TweenService:Create(nameL, ti, { TextTransparency = 0 }):Play()
+            TweenService:Create(tagL, ti, { TextTransparency = 0.05 }):Play()
+        end)
+        -- Hold, then fade + collapse (height -> 0 so the stack closes the gap smoothly)
         task.spawn(function()
             task.wait(4.5)
-            TweenService:Create(card, TweenInfo.new(0.5), { BackgroundTransparency = 1 }):Play()
-            TweenService:Create(txt, TweenInfo.new(0.5), { TextTransparency = 1 }):Play()
-            task.wait(0.5)
-            card:Destroy()
+            local to = TweenInfo.new(0.32, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+            pcall(function()
+                TweenService:Create(card, to, { BackgroundTransparency = 1, Size = UDim2.new(0, cardW, 0, 0) }):Play()
+                if st then TweenService:Create(st, to, { Transparency = 1 }):Play() end
+                TweenService:Create(bar, to, { BackgroundTransparency = 1 }):Play()
+                TweenService:Create(nameL, to, { TextTransparency = 1 }):Play()
+                TweenService:Create(tagL, to, { TextTransparency = 1 }):Play()
+            end)
+            task.wait(0.34)
+            for i, cc in ipairs(kfCards) do if cc == card then table.remove(kfCards, i); break end end
+            pcall(function() card:Destroy() end)
         end)
     end
-    
+
     local function setupPlayerDeathTrack(p)
         local function connectChar(char)
             local hum = char:WaitForChild("Humanoid", 5)
             if hum then
                 hum.Died:Connect(function()
-                    if S.KillFeed and isRoundActive() then
+                    if S.HUD_KillFeed and isRoundActive() then
                         local r = getRole(p)
-                        local msg = ""
-                        local color = Color3.fromRGB(255, 255, 255)
-                        
-                        if r == "Murderer" then
-                            msg = "☠ [Murderer] " .. p.Name .. " was eliminated!"
-                            color = Color3.fromRGB(255, 50, 50)
-                        elseif r == "Sheriff" or r == "Hero" then
-                            msg = "🔫 [" .. r .. "] " .. p.Name .. " was killed!"
-                            color = Color3.fromRGB(50, 100, 255)
-                        else
-                            msg = "👤 [Innocent] " .. p.Name .. " died."
-                            color = Color3.fromRGB(200, 200, 200)
-                        end
-                        
-                        addKillFeed(msg, color)
+                        local color, tag
+                        if r == "Murderer" then color = Color3.fromRGB(255, 70, 70); tag = "Murderer"
+                        elseif r == "Sheriff" or r == "Hero" then color = Color3.fromRGB(70, 140, 255); tag = r
+                        else color = Color3.fromRGB(190, 190, 190); tag = "Innocent" end
+                        addKillFeed(p.Name, tag, color)
                     end
                 end)
             end
@@ -6341,7 +7706,8 @@ do
         lastDodge = tick()
         local mode = S.AutoDodgeMode or "Teleport"
         if mode == "Teleport" then
-            hrp.CFrame = hrp.CFrame + escapeDir * 18
+            -- Small sidestep: just enough to pull the hitbox off the knife's line, not a big obvious warp.
+            hrp.CFrame = hrp.CFrame + escapeDir * 6
             Notify("Auto Dodge", label .. " (Teleported)", 2)
         elseif mode == "Jump" then
             hrp.CFrame = hrp.CFrame + Vector3.new(0, 18, 0)
@@ -6425,4 +7791,4 @@ do
         end
     end)
 end
-print("[MM2]: Loaded.")
+print("[Inertia]: Loaded.")
