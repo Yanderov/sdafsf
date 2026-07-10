@@ -2,6 +2,13 @@ if _G.MM2_Visuals_Script then
     pcall(function() _G.MM2_Visuals_Script:Destroy() end)
     _G.MM2_Visuals_Script = nil
 end
+
+-- Destroy PartSwim to stop the massive error spam in the console
+pcall(function()
+    local ps = game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("PartSwim")
+    if ps then ps:Destroy() end
+end)
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
@@ -11,6 +18,7 @@ local LP = Players.LocalPlayer
 -- The game's real max camera zoom, captured BEFORE anything (incl. config auto-load) changes it.
 -- "No Camera Limit" restores THIS when off, so executing the script never widens your zoom-out.
 local _origMaxZoom = LP.CameraMaxZoomDistance
+local ncPlat = nil
 local S = {
     Connections = {}, Gui = nil, OriginalTransparencies = {},
     VoidPlatform = nil, LastGrab = 0,
@@ -44,7 +52,7 @@ local S = {
     ClickTP = false,
     AutoSaveCfg = true,
     WalkFling = false,
-    Swim = false, WallTP = false, HeadSit = false,
+    WallTP = false, HeadSit = false,
     Orbit = false, OrbitSpeed = 20, OrbitDist = 6, OrbitHeight = 0,
     Bang = false, BangSpeed = 3, Jerk = false,
     InvisibleFE = false, FreeCam = false, Blink = false, ClickFling = false,
@@ -58,7 +66,7 @@ local S = {
     AutoDodgeKnife = false, AutoDodgeMode = "Teleport", AutoDodgeSpeed = 16,
     AimLock = false, AimLockTarget = "Nearest",
     AimLockHoldRMB = true, AimSmooth = 1, AimPrediction = 0, AimPart = "Head",
-    MuteGun = false, MuteCoin = false, MuteKill = false, MuteKillNotify = false, HideKillFX = false,
+    MuteGun = false, MuteCoin = false, MuteKill = false, MuteKillNotify = false, MuteKillEffect = false, HideKillFX = false,
     Whitelist = {},   -- [playerName]=true : right-click in Targets; skipped by fling / kill / aura / aim
     ManualTargets = {},  -- [playerName]=true : left-click multi-select in Targets (Fun / Follow). empty = Auto
 }
@@ -89,6 +97,7 @@ function S:Destroy()
         for part, t in pairs(self.OriginalTransparencies) do if part and part.Parent then part.Transparency = t end end
     end)
     if self.VoidPlatform then pcall(function() self.VoidPlatform:Destroy() end); self.VoidPlatform = nil end
+    if ncPlat then pcall(function() ncPlat:Destroy() end); ncPlat = nil end
     for _, c in ipairs(self.Connections) do pcall(function() c:Disconnect() end) end
     if self.Gui then pcall(function() self.Gui:Destroy() end) end
 end
@@ -699,7 +708,7 @@ local FOV_COLORS = {
     Black  = Color3.fromRGB(15, 15, 15),
 }
 
-local WW, WH = 520, 290
+local WW, WH = 640, 460
 local expandedSize = UDim2.fromOffset(WW, WH)
 local Main = Instance.new("Frame")
 Main.Name = "Main"
@@ -919,8 +928,8 @@ SB.Name = "Sidebar"
 SB.Parent = Main
 SB.BackgroundColor3 = T.Sidebar; pcall(function() SB:SetAttribute("ThemeColorRole_BackgroundColor3", "Sidebar") end)
 SB.BorderSizePixel = 0
-SB.Position = UDim2.new(0, 0, 0, 89)
-SB.Size = UDim2.new(0, 110, 1, -89)
+SB.Position = UDim2.new(0, 0, 0, 110)
+SB.Size = UDim2.new(0, 140, 1, -136)
 SB.CanvasSize = UDim2.new(0, 0, 0, 0)
 SB.AutomaticCanvasSize = Enum.AutomaticSize.Y
 SB.ScrollBarThickness = 2
@@ -931,8 +940,8 @@ SBLine.Parent = Main
 SBLine.BackgroundColor3 = T.Bd; pcall(function() SBLine:SetAttribute("ThemeColorRole_BackgroundColor3", "Bd") end)
 SBLine.BackgroundTransparency = 0.3
 SBLine.BorderSizePixel = 0
-SBLine.Position = UDim2.new(0, 110, 0, 41)
-SBLine.Size = UDim2.new(0, 1, 1, -41)
+SBLine.Position = UDim2.new(0, 140, 0, 41)
+SBLine.Size = UDim2.new(0, 1, 1, -67)
 local SBLayout = Instance.new("UIListLayout")
 SBLayout.Parent = SB
 SBLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -947,7 +956,7 @@ SettingsModal.Parent = SG
 SettingsModal.Active = true
 SettingsModal.AnchorPoint = Vector2.new(0.5, 0.5)
 SettingsModal.Position = UDim2.new(0.5, 0, 0.5, 0)
-SettingsModal.Size = UDim2.fromOffset(260, 240)
+SettingsModal.Size = UDim2.fromOffset(300, 340)
 SettingsModal.BackgroundColor3 = T.Card; pcall(function() SettingsModal:SetAttribute("ThemeColorRole_BackgroundColor3", "Card") end)
 SettingsModal.BorderSizePixel = 0
 SettingsModal.ZIndex = 999
@@ -994,8 +1003,8 @@ local mScroll = Instance.new("ScrollingFrame")
 mScroll.Parent = SettingsModal
 mScroll.BackgroundTransparency = 1
 mScroll.BorderSizePixel = 0
-mScroll.Position = UDim2.new(0, 12, 0, 36)
-mScroll.Size = UDim2.new(1, -24, 1, -48)
+mScroll.Position = UDim2.new(0, 16, 0, 44)
+mScroll.Size = UDim2.new(1, -32, 1, -60)
 mScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 mScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 mScroll.ScrollBarThickness = 3
@@ -1086,7 +1095,7 @@ local themeContainer = Instance.new("Frame")
 themeContainer.Parent = mScroll
 themeContainer.LayoutOrder = 6
 themeContainer.BackgroundTransparency = 1
-themeContainer.Size = UDim2.new(1, 0, 0, 90)
+themeContainer.Size = UDim2.new(1, 0, 0, 150)
 themeContainer.ZIndex = 1001
 
 local themeScroll = Instance.new("ScrollingFrame")
@@ -1156,7 +1165,7 @@ local ProfileHeader = Instance.new("Frame")
 ProfileHeader.Name = "ProfileHeader"
 ProfileHeader.Parent = Main
 ProfileHeader.Position = UDim2.new(0, 0, 0, 41)
-ProfileHeader.Size = UDim2.new(0, 110, 0, 48)
+ProfileHeader.Size = UDim2.new(0, 140, 0, 69)
 ProfileHeader.BackgroundColor3 = T.Sidebar; pcall(function() ProfileHeader:SetAttribute("ThemeColorRole_BackgroundColor3", "Sidebar") end)
 ProfileHeader.BorderSizePixel = 0
 
@@ -1176,8 +1185,8 @@ end)
 
 local AvatarImage = Instance.new("ImageLabel")
 AvatarImage.Parent = ProfileHeader
-AvatarImage.Position = UDim2.new(0, 6, 0.5, -14)
-AvatarImage.Size = UDim2.fromOffset(28, 28)
+AvatarImage.Position = UDim2.new(0, 10, 0.5, -18)
+AvatarImage.Size = UDim2.fromOffset(36, 36)
 AvatarImage.BackgroundTransparency = 1
 AvatarImage.Image = avatarUrl
 AvatarImage.ZIndex = 50
@@ -1187,10 +1196,10 @@ Stroke(AvatarImage, T.Bd2, 1, 0.4)
 local UserLabel = Instance.new("TextLabel")
 UserLabel.Parent = ProfileHeader
 UserLabel.BackgroundTransparency = 1
-UserLabel.Position = UDim2.new(0, 40, 0.5, -14)
-UserLabel.Size = UDim2.new(1, -44, 0, 14)
+UserLabel.Position = UDim2.new(0, 52, 0.5, -16)
+UserLabel.Size = UDim2.new(1, -58, 0, 16)
 UserLabel.Font = FM
-UserLabel.TextSize = 10
+UserLabel.TextSize = 12
 UserLabel.TextColor3 = T.Tx; pcall(function() UserLabel:SetAttribute("ThemeColorRole_TextColor3", "Tx") end)
 UserLabel.TextXAlignment = Enum.TextXAlignment.Left
 UserLabel.TextTruncate = Enum.TextTruncate.AtEnd
@@ -1200,10 +1209,10 @@ UserLabel.ZIndex = 50
 local SubLabel = Instance.new("TextLabel")
 SubLabel.Parent = ProfileHeader
 SubLabel.BackgroundTransparency = 1
-SubLabel.Position = UDim2.new(0, 40, 0.5, 0)
-SubLabel.Size = UDim2.new(1, -44, 0, 10)
+SubLabel.Position = UDim2.new(0, 52, 0.5, 2)
+SubLabel.Size = UDim2.new(1, -58, 0, 12)
 SubLabel.Font = F
-SubLabel.TextSize = 8
+SubLabel.TextSize = 10
 SubLabel.TextColor3 = T.Tx3; pcall(function() SubLabel:SetAttribute("ThemeColorRole_TextColor3", "Tx3") end)
 SubLabel.TextXAlignment = Enum.TextXAlignment.Left
 SubLabel.Text = "Premium"
@@ -1222,214 +1231,6 @@ ProfileBtn.MouseButton1Click:Connect(function()
 end)
 
 mScroll.Active = true
-
--- Create Mobile UI Components (floating toggle button and quick action panel)
-local function createMobileHUD()
-    if SG:FindFirstChild("MobileToggle") then return end
-    
-    local MobileToggle = Instance.new("ImageButton")
-    MobileToggle.Name = "MobileToggle"
-    MobileToggle.Parent = SG
-    MobileToggle.Size = UDim2.fromOffset(36, 36)
-    MobileToggle.Position = UDim2.new(0, 10, 0, 10)
-    MobileToggle.BackgroundColor3 = T.Card; pcall(function() MobileToggle:SetAttribute("ThemeColorRole_BackgroundColor3", "Card") end)
-    MobileToggle.BorderSizePixel = 0
-    MobileToggle.ZIndex = 2000
-    Corner(MobileToggle, 9999)
-    Stroke(MobileToggle, T.Bd2, 1, 0.4)
-    Shadow(MobileToggle, 0.3)
-    
-    local tIcon = Instance.new("Frame")
-    tIcon.Parent = MobileToggle
-    tIcon.BackgroundTransparency = 1
-    tIcon.Size = UDim2.fromScale(0.6, 0.6)
-    tIcon.Position = UDim2.fromScale(0.2, 0.2)
-    
-    local barrel = Instance.new("Frame")
-    barrel.Parent = tIcon
-    barrel.BackgroundColor3 = T.White; pcall(function() barrel:SetAttribute("ThemeColorRole_BackgroundColor3", "White") end)
-    barrel.BorderSizePixel = 0
-    barrel.Position = UDim2.new(0.2, 0, 0.2, 0)
-    barrel.Size = UDim2.new(0.6, 0, 0.25, 0)
-    Corner(barrel, 1)
-    
-    local grip = Instance.new("Frame")
-    grip.Parent = tIcon
-    grip.BackgroundColor3 = T.White; pcall(function() grip:SetAttribute("ThemeColorRole_BackgroundColor3", "White") end)
-    grip.BorderSizePixel = 0
-    grip.Position = UDim2.new(0.2, 0, 0.45, 0)
-    grip.Size = UDim2.new(0.25, 0, 0.4, 0)
-    Corner(grip, 1)
-    
-    local trig = Instance.new("Frame")
-    trig.Parent = tIcon
-    trig.BackgroundColor3 = T.White; pcall(function() trig:SetAttribute("ThemeColorRole_BackgroundColor3", "White") end)
-    trig.BorderSizePixel = 0
-    trig.Position = UDim2.new(0.45, 0, 0.45, 0)
-    trig.Size = UDim2.new(0.1, 0, 0.15, 0)
-    
-    MobileToggle.MouseButton1Click:Connect(function()
-        Main.Visible = not Main.Visible
-        SFX.Click()
-    end)
-    
-    do
-        local dr, ds, sp
-        MobileToggle.InputBegan:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-                dr = true
-                ds = i.Position
-                sp = MobileToggle.Position
-            end
-        end)
-        tc(UIS.InputChanged:Connect(function(i)
-            if dr and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
-                local d = i.Position - ds
-                MobileToggle.Position = UDim2.new(sp.X.Scale, sp.X.Offset + d.X, sp.Y.Scale, sp.Y.Offset + d.Y)
-            end
-        end))
-        tc(UIS.InputEnded:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-                dr = false
-            end
-        end))
-    end
-    
-    local QuickActions = Instance.new("Frame")
-    QuickActions.Name = "MobileHUD"
-    QuickActions.Parent = SG
-    QuickActions.Active = true
-    QuickActions.Size = UDim2.fromOffset(44, 280)
-    QuickActions.Position = UDim2.new(1, -60, 0.5, -140)
-    QuickActions.BackgroundColor3 = T.Card; pcall(function() QuickActions:SetAttribute("ThemeColorRole_BackgroundColor3", "Card") end)
-    QuickActions.BorderSizePixel = 0
-    QuickActions.ZIndex = 2000
-    Corner(QuickActions, 8)
-    Stroke(QuickActions, T.Bd2, 1.2, 0.4)
-    Shadow(QuickActions, 0.3)
-    
-    local qList = Instance.new("UIListLayout")
-    qList.Parent = QuickActions
-    qList.SortOrder = Enum.SortOrder.LayoutOrder
-    qList.Padding = UDim.new(0, 5)
-    Pad(QuickActions, 5, 5, 5, 5)
-    
-    local function mkQAButton(name, text, order, toggleField, callback)
-        local btn = Instance.new("TextButton")
-        btn.Name = name
-        btn.Parent = QuickActions
-        btn.LayoutOrder = order
-        btn.Size = UDim2.fromOffset(34, 34)
-        btn.BackgroundColor3 = T.Elev; pcall(function() btn:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
-        btn.BorderSizePixel = 0
-        btn.Font = FB
-        btn.TextSize = 10
-        btn.TextColor3 = T.White; pcall(function() btn:SetAttribute("ThemeColorRole_TextColor3", "White") end)
-        btn.Text = text
-        btn.ZIndex = 2001
-        Corner(btn, 6)
-        Stroke(btn, T.Bd, 1, 0.4)
-        
-        local function updateState()
-            local active = false
-            if toggleField then
-                active = S[toggleField] == true
-            end
-            btn:SetAttribute("Active", active)
-            btn.BackgroundColor3 = active and T.Accent or T.Elev
-            btn.TextColor3 = active and T.KnobOn or T.White
-        end
-        
-        btn.MouseButton1Click:Connect(function()
-            SFX.Click()
-            if callback then
-                callback(btn)
-            else
-                if toggleField then
-                    S[toggleField] = not S[toggleField]
-                    updateState()
-                end
-            end
-        end)
-        
-        task.spawn(function()
-            while QuickActions and QuickActions.Parent do
-                updateState()
-                task.wait(0.25)
-            end
-        end)
-        
-        return btn
-    end
-    
-    local tpBtn = mkQAButton("TP", "TP", 1, "_mobileTPActive", function(btn)
-        S._mobileTPActive = not S._mobileTPActive
-        S._mobileFlingActive = false
-        btn:SetAttribute("Active", S._mobileTPActive)
-        btn.BackgroundColor3 = S._mobileTPActive and T.Accent or T.Elev
-        btn.TextColor3 = S._mobileTPActive and T.KnobOn or T.White
-        if S._mobileTPActive then
-            Notify("Mobile Actions", "Tap anywhere in world to teleport", 2.5)
-        end
-    end)
-    
-    local flingBtn = mkQAButton("Fling", "Fling", 2, "_mobileFlingActive", function(btn)
-        S._mobileFlingActive = not S._mobileFlingActive
-        S._mobileTPActive = false
-        btn:SetAttribute("Active", S._mobileFlingActive)
-        btn.BackgroundColor3 = S._mobileFlingActive and T.Accent or T.Elev
-        btn.TextColor3 = S._mobileFlingActive and T.KnobOn or T.White
-        if S._mobileFlingActive then
-            Notify("Mobile Actions", "Tap any player in world to Fling them", 2.5)
-        end
-    end)
-    
-    local blinkBtn = mkQAButton("Blink", "BL", 3, "Blink", function(btn)
-        S.Blink = not S.Blink
-        if S.Blink then
-            if startBlink then startBlink() end
-        else
-            if stopBlink then stopBlink() end
-        end
-        btn:SetAttribute("Active", S.Blink)
-        btn.BackgroundColor3 = S.Blink and T.Accent or T.Elev
-        btn.TextColor3 = S.Blink and T.KnobOn or T.White
-    end)
-    
-    local flyBtn = mkQAButton("Fly", "FLY", 4, "Fly")
-    local ncBtn = mkQAButton("Noclip", "NC", 5, "NoClip")
-    
-    local grabBtn = mkQAButton("Grab Gun", "GG", 6, nil, function()
-        if grabGun then grabGun() end
-    end)
-    
-    local killBtn = mkQAButton("Kill Murderer", "KM", 7, nil, function()
-        if killMurder then killMurder() end
-    end)
-    
-    do
-        local dr, ds, sp
-        QuickActions.InputBegan:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-                dr = true
-                ds = i.Position
-                sp = QuickActions.Position
-            end
-        end)
-        tc(UIS.InputChanged:Connect(function(i)
-            if dr and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
-                local d = i.Position - ds
-                QuickActions.Position = UDim2.new(sp.X.Scale, sp.X.Offset + d.X, sp.Y.Scale, sp.Y.Offset + d.Y)
-            end
-        end))
-        tc(UIS.InputEnded:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-                dr = false
-            end
-        end))
-    end
-end
-pcall(createMobileHUD)
 
 -- Make settings modal draggable by header
 do
@@ -1461,8 +1262,8 @@ ContentArea.Name = "Content"
 ContentArea.Parent = Main
 ContentArea.BackgroundTransparency = 1
 ContentArea.BorderSizePixel = 0
-ContentArea.Position = UDim2.new(0, 116, 0, 41)
-ContentArea.Size = UDim2.new(1, -122, 1, -41)
+ContentArea.Position = UDim2.new(0, 146, 0, 41)
+ContentArea.Size = UDim2.new(1, -152, 1, -67)
 ContentArea.CanvasSize = UDim2.new(0, 0, 0, 0)
 ContentArea.AutomaticCanvasSize = Enum.AutomaticSize.Y
 ContentArea.ScrollBarThickness = 3
@@ -1478,7 +1279,6 @@ StatusBar.BackgroundColor3 = Color3.fromRGB(4, 4, 4)
 StatusBar.BorderSizePixel = 0
 StatusBar.Position = UDim2.new(0, 0, 1, -26)
 StatusBar.Size = UDim2.new(1, 0, 0, 26)
-StatusBar.Visible = false
 local sbTop = Instance.new("Frame")
 sbTop.Parent = StatusBar
 sbTop.BorderSizePixel = 0
@@ -1573,6 +1373,7 @@ mkPage("World")
 mkPage("Autofarm")
 mkPage("Servers")
 mkPage("Config")
+local PTest = mkPage("Test")
 Pages.Visuals.Visible = true
 SBItems = {}
 activePage = Pages.Visuals
@@ -1692,6 +1493,7 @@ mkSBItem("Teleport", "diamond", Pages.Teleport, 10)
 mkSBItem("Servers", "server", Pages.Servers, 11)
 mkSBItem("HUD", "grid", Pages.HUD, 12)
 mkSBItem("Config", "sliders", Pages.Config, 13)
+mkSBItem("Test", "diamond", PTest, 14)
 refreshSB()
 local BindReg = {}
 local PendingBind = nil
@@ -2570,6 +2372,7 @@ local function ceilingTP()
     local hrp = c and c:FindFirstChild("HumanoidRootPart")
     if hrp then hrp.CFrame = hrp.CFrame + Vector3.new(0, 250, 0); Notify("Teleport", "Up 250 studs", 2) end
 end
+
 do
     local sec1 = mkSection(Pages.Visuals, "Chams", 1)
     mkToggle(sec1, "Murderer", false, function(v) S.MurderChams = v end, 1)
@@ -2808,6 +2611,7 @@ do
             end
         end)
     end))
+
 end
 do
     local sec1 = mkSection(Pages.Motion, "Speed & Jump", 1)
@@ -3138,9 +2942,13 @@ do
             MuteKill       = { "death", "die", "dead", "stab", "slash", "knife", "hit", "hurt", "ough", "splat", "kill", "blood",
                                "gib", "corpse", "bodyfall", "body_fall", "thud", "squish", "impale", "scream", "grunt", "pain", "damage", "explo" },
             MuteKillNotify = { "gameover", "game_over", "roundover", "results", "win", "victory", "lose", "defeat", "sheriffwin", "murdererwin" },
+            MuteKillEffect = { "ghost", "laser", "fire", "teddy", "slasher", "ice", "freeze", "vampire", "glitch",
+                               "radioactive", "ninja", "sparkler", "portal", "blackhole", "tornado", "statue", "gold",
+                               "stone", "crystal", "snowman", "pumpkin", "bat", "flame", "soul", "skull", "skeleton",
+                               "reaper", "effect", "shatter", "freeze", "burn", "disintegrate" },
         }
         local muted = {}   -- [Sound] = original Volume (only while we've silenced it)
-        local function anyMuteOn() return S.MuteGun or S.MuteCoin or S.MuteKill or S.MuteKillNotify end
+        local function anyMuteOn() return S.MuteGun or S.MuteCoin or S.MuteKill or S.MuteKillNotify or S.MuteKillEffect end
         local function catFor(s)
             local hay = s.Name .. " " .. tostring(s.SoundId)
             local a = s.Parent
@@ -3188,6 +2996,7 @@ do
         mkToggle(secSnd, "Mute Gun Sound",     false, function(v) S.MuteGun = v;        refreshMutes() end, 1)
         mkToggle(secSnd, "Mute Coin Sound",    false, function(v) S.MuteCoin = v;       refreshMutes() end, 2)
         mkToggle(secSnd, "Mute Kill Sound",    false, function(v) S.MuteKill = v;       refreshMutes() end, 3)
+        mkToggle(secSnd, "Mute Kill Effect Sound", false, function(v) S.MuteKillEffect = v; refreshMutes() end, 5)
         mkToggle(secSnd, "Mute Kill Notify",   false, function(v) S.MuteKillNotify = v; refreshMutes() end, 4)
     end
 
@@ -3530,34 +3339,6 @@ local function funTarget()
         end
     end
     return best
-end
--- Swim
-local swimBeat
-local function startSwim()
-    local c = LP.Character
-    local hum = c and c:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
-    -- Float/swim by cancelling gravity on OUR OWN HumanoidRootPart each frame. We deliberately do NOT
-    -- force the Humanoid's Swimming state and do NOT touch workspace.Gravity — forcing the Swimming
-    -- state is what made MM2's own PartSwim.SwimController run every frame with no water and spam
-    -- "Position is not a valid member of Model" errors. This way there's zero spam.
-    if swimBeat then swimBeat:Disconnect() end
-    swimBeat = RunService.Heartbeat:Connect(function()
-        pcall(function()
-            local root = getRoot(LP.Character)
-            local h = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
-            if root and h then
-                local vy = 0
-                if UIS:IsKeyDown(Enum.KeyCode.Space) then vy = 26
-                elseif UIS:IsKeyDown(Enum.KeyCode.LeftShift) then vy = -26 end
-                local md = h.MoveDirection
-                root.AssemblyLinearVelocity = Vector3.new(md.X * 22, vy, md.Z * 22)
-            end
-        end)
-    end)
-end
-local function stopSwim()
-    if swimBeat then swimBeat:Disconnect(); swimBeat = nil end
 end
 -- Wall TP
 local walltpConn
@@ -4019,8 +3800,7 @@ do
 end
 do
     local secM = mkSection(Pages.Motion, "Movement Tricks", 3)
-    mkToggle(secM, "Swim", false, function(v) S.Swim = v; if v then startSwim() else stopSwim() end end, 1)
-    mkToggle(secM, "Wall TP", false, function(v) S.WallTP = v; if v then startWallTP() else stopWallTP() end end, 2)
+        mkToggle(secM, "Wall TP", false, function(v) S.WallTP = v; if v then startWallTP() else stopWallTP() end end, 2)
     mkAction(secM, "Wall Walk", function() doWallWalk() end, 3)
     mkAction(secM, "Trip", function() doTrip() end, 4)
     mkAction(secM, "Fake Out (Flinger Kill)", function() doFakeOut() end, 5)
@@ -4337,12 +4117,6 @@ do
 end
 do
     local sec = mkSection(Pages.HUD, "HUD Elements", 1)
-    mkToggle(sec, "Mobile Actions Panel", true, function(v)
-        local t = SG:FindFirstChild("MobileToggle")
-        local h = SG:FindFirstChild("MobileHUD")
-        if t then t.Visible = v end
-        if h then h.Visible = v end
-    end, 0)
     mkToggle(sec, "Roles HUD", false, function(v)
         S.HUD_Roles = v
         HUDEls["Roles"].frame.Visible = v
@@ -5604,6 +5378,14 @@ local function loadConfig(name)
     if not ok then return false end
     local ok2, data = pcall(function() return CfgHttp:JSONDecode(content) end)
     if not ok2 then return false end
+    if name == "_autoload" and type(data.controls) == "table" then
+        for k, v in pairs(data.controls) do
+            local kl = k:lower()
+            if kl:find("noclip") or kl:find("autofarm") or kl:find("fly") or kl:find("blink") or kl:find("invisible") or kl:find("fling") or kl:find("gravity") then
+                data.controls[k] = false
+            end
+        end
+    end
     applyConfig(data)
     return true
 end
@@ -6156,7 +5938,7 @@ do
     tc(UIS.InputChanged:Connect(function(i)
         if rs and i.UserInputType == Enum.UserInputType.MouseMovement then
             local d = i.Position - rm
-            expandedSize = UDim2.fromOffset(math.max(360, rz.X + d.X), math.max(220, rz.Y + d.Y))
+            expandedSize = UDim2.fromOffset(math.max(460, rz.X + d.X), math.max(310, rz.Y + d.Y))
             Main.Size = expandedSize
         end
     end))
@@ -6591,12 +6373,44 @@ tc(RunService.RenderStepped:Connect(function()
         end
     end)
 end))
+local function getNcPlat()
+    if not ncPlat or not ncPlat.Parent then
+        ncPlat = Instance.new("Part")
+        ncPlat.Name = "Inertia_NcPlat"
+        ncPlat.Size = Vector3.new(4, 0.5, 4)
+        ncPlat.Transparency = 1
+        ncPlat.Anchored = true
+        ncPlat.CanCollide = true
+        ncPlat.Parent = workspace
+    end
+    return ncPlat
+end
+
 tc(RunService.Stepped:Connect(function()
     if S.NoClip or S.FastAutofarm then
         local c = LP.Character
         if c then
             local hum = c:FindFirstChildOfClass("Humanoid")
-            if hum then hum.PlatformStand = true end
+            local hrp = c:FindFirstChild("HumanoidRootPart")
+            if S.FastAutofarm then
+                if hum then hum.PlatformStand = true end
+                if ncPlat then ncPlat.CanCollide = false end
+            else
+                if hum and hum.PlatformStand then hum.PlatformStand = false end
+                if hrp then
+                    local plat = getNcPlat()
+                    local params = RaycastParams.new()
+                    params.FilterType = Enum.RaycastFilterType.Exclude
+                    params.FilterDescendantsInstances = {c, plat}
+                    local res = workspace:Raycast(hrp.Position, Vector3.new(0, -3.8, 0), params)
+                    if res and hrp.AssemblyLinearVelocity.Y <= 0.1 then
+                        plat.Position = Vector3.new(hrp.Position.X, res.Position.Y - 0.25, hrp.Position.Z)
+                        plat.CanCollide = true
+                    else
+                        plat.CanCollide = false
+                    end
+                end
+            end
             if c ~= S._ncChar or (tick() - (S._ncAt or 0)) > 2 then
                 S._ncChar = c; S._ncAt = tick(); S._ncParts = {}
                 for _, pt in ipairs(c:GetDescendants()) do if pt:IsA("BasePart") then table.insert(S._ncParts, pt) end end
@@ -6604,6 +6418,7 @@ tc(RunService.Stepped:Connect(function()
             for _, pt in ipairs(S._ncParts) do if pt.Parent then pt.CanCollide = false end end
         end
     else
+        if ncPlat then ncPlat.CanCollide = false end
         local c = LP.Character
         local hum = c and c:FindFirstChildOfClass("Humanoid")
         if hum and hum.PlatformStand then
@@ -7182,29 +6997,20 @@ do
     end
 end
 tc(UIS.InputBegan:Connect(function(input, processed)
-    if processed then return end
     if UIS:GetFocusedTextBox() then return end
-    
-    local isTouch = (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch)
-    if isTouch then
+    if S.ClickTP and input.KeyCode == Enum.KeyCode.E then
+        local c = LP.Character
+        local hrp = c and c:FindFirstChild("HumanoidRootPart")
         local mouse = LP:GetMouse()
-        if S._mobileTPActive and mouse and mouse.Hit then
-            local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                hrp.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0, 3, 0))
-                Notify("Click TP", "Teleported", 1.5)
-                S._mobileTPActive = false
-                local tpBtn = SG:FindFirstChild("MobileHUD") and SG.MobileHUD:FindFirstChild("TP")
-                if tpBtn then
-                    tpBtn.BackgroundColor3 = T.Elev; pcall(function() tpBtn:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
-                    tpBtn.TextColor3 = T.White; pcall(function() tpBtn:SetAttribute("ThemeColorRole_TextColor3", "White") end)
-                    tpBtn:SetAttribute("Active", false)
-                end
-            end
+        if hrp and mouse and mouse.Hit then
+            hrp.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0, 3, 0))
+            Notify("Click TP", "Teleported", 1.5)
         end
-        
-        if S._mobileFlingActive and mouse and mouse.Target then
-            local target = mouse.Target
+    end
+    if S.ClickFling and input.UserInputType == Enum.UserInputType.MouseButton1 then
+        local mouse = LP:GetMouse()
+        local target = mouse and mouse.Target
+        if target then
             local parent = target.Parent
             local p
             while parent and parent ~= workspace do
@@ -7217,46 +7023,6 @@ tc(UIS.InputBegan:Connect(function(input, processed)
                 if th and th.Health > 0 then
                     Notify("Click Fling", "Flinging " .. p.Name, 2)
                     task.spawn(function() pcall(skidFling, p) end)
-                    S._mobileFlingActive = false
-                    local flingBtn = SG:FindFirstChild("MobileHUD") and SG.MobileHUD:FindFirstChild("Fling")
-                    if flingBtn then
-                        flingBtn.BackgroundColor3 = T.Elev; pcall(function() flingBtn:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
-                        flingBtn.TextColor3 = T.White; pcall(function() flingBtn:SetAttribute("ThemeColorRole_TextColor3", "White") end)
-                        flingBtn:SetAttribute("Active", false)
-                    end
-                end
-            end
-        end
-    end
-    
-    if S.ClickTP and input.KeyCode == Enum.KeyCode.E then
-        local c = LP.Character
-        local hrp = c and c:FindFirstChild("HumanoidRootPart")
-        local mouse = LP:GetMouse()
-        if hrp and mouse and mouse.Hit then
-            hrp.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0, 3, 0))
-            Notify("Click TP", "Teleported", 1.5)
-        end
-    end
-    
-    if S.ClickFling and input.UserInputType == Enum.UserInputType.MouseButton1 then
-        if not S._mobileFlingActive then
-            local mouse = LP:GetMouse()
-            local target = mouse and mouse.Target
-            if target then
-                local parent = target.Parent
-                local p
-                while parent and parent ~= workspace do
-                    p = Players:GetPlayerFromCharacter(parent)
-                    if p then break end
-                    parent = parent.Parent
-                end
-                if p and p ~= LP and not isWhitelisted(p) then
-                    local th = p.Character and p.Character:FindFirstChildOfClass("Humanoid")
-                    if th and th.Health > 0 then
-                        Notify("Click Fling", "Flinging " .. p.Name, 2)
-                        task.spawn(function() pcall(skidFling, p) end)
-                    end
                 end
             end
         end
