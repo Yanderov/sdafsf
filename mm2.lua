@@ -69,9 +69,10 @@ local S = {
     MuteGun = false, MuteCoin = false, MuteKill = false, MuteKillNotify = false, MuteKillEffect = false, HideKillFX = false,
     Whitelist = {},   -- [playerName]=true : right-click in Targets; skipped by fling / kill / aura / aim
     ManualTargets = {},  -- [playerName]=true : left-click multi-select in Targets (Fun / Follow). empty = Auto
+    PiercingBullet = false,
 }
 _G.MM2_Visuals_Script = S
-local createHighlight, getRole, rebuildCrosshair, moveTo, isRoundActive
+local createHighlight, getRole, rebuildCrosshair, moveTo, isRoundActive, playEmote, stopEmote
 local OriginalSheriff, Heroes, RoleCache = nil, {}, {}
 local HeroPresent = false  -- true once a Hero exists this round; while true, nobody is a Sheriff
 local LastRemoteFetch, LastRoundHadRoles = 0, false
@@ -682,6 +683,78 @@ local function Notify(title, msg, dur)
     end)
 end
 
+local currentEmoteToggle = nil
+local currentEmoteTrack = nil
+local currentEmoteId = nil
+local playingEmoteRecurse = false
+
+playEmote = function(toggleObj, animId, title)
+    if playingEmoteRecurse then return end
+    playingEmoteRecurse = true
+    
+    if currentEmoteToggle and currentEmoteToggle ~= toggleObj then
+        pcall(function()
+            currentEmoteToggle.state = false
+            currentEmoteToggle.updateVisuals()
+        end)
+    end
+    
+    if currentEmoteTrack then
+        pcall(function()
+            currentEmoteTrack:Stop()
+            currentEmoteTrack:Destroy()
+        end)
+        currentEmoteTrack = nil
+    end
+    
+    local char = LP.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum and hum.Health > 0 and hum.RigType == Enum.HumanoidRigType.R15 then
+        local anim = Instance.new("Animation")
+        anim.AnimationId = "rbxassetid://" .. animId
+        local ok, track = pcall(function() return hum:LoadAnimation(anim) end)
+        if ok and track then
+            currentEmoteTrack = track
+            currentEmoteTrack.Looped = true
+            currentEmoteTrack:Play()
+            currentEmoteToggle = toggleObj
+            currentEmoteId = animId
+        else
+            if toggleObj then
+                toggleObj.state = false
+                toggleObj.updateVisuals()
+            end
+            Notify("Animation Error", "Failed to load animation", 3)
+        end
+    else
+        if toggleObj then
+            toggleObj.state = false
+            toggleObj.updateVisuals()
+        end
+        Notify("Animation Error", "This animation only works with R15 characters!", 3)
+    end
+    
+    playingEmoteRecurse = false
+end
+
+stopEmote = function(toggleObj)
+    if playingEmoteRecurse then return end
+    playingEmoteRecurse = true
+    
+    if currentEmoteToggle == toggleObj or not toggleObj then
+        if currentEmoteTrack then
+            pcall(function()
+                currentEmoteTrack:Stop()
+                currentEmoteTrack:Destroy()
+            end)
+            currentEmoteTrack = nil
+        end
+        currentEmoteToggle = nil
+        currentEmoteId = nil
+    end
+    
+    playingEmoteRecurse = false
+end
 
 local FOVCircle = Instance.new("Frame")
 FOVCircle.Name = "FOV"
@@ -1717,7 +1790,7 @@ local function mkAction(parent, label, callback, order)
     btn.Text = label
     Corner(btn, 7)
     local bst = Stroke(btn, T.Bd2, 1, 0.4)
-    local entry = { label = label, cfgId = _cfgId(parent, label), bindKey = nil, oldKey = nil, isToggle = false }
+    local entry = { label = label, cfgId = _cfgId(parent, label), bindKey = nil, oldKey = nil, isToggle = false, btn = btn }
     function entry.updateVisuals()
         local bk = entry.bindKey and ("   [ " .. entry.bindKey.Name .. " ]") or ""
         btn.Text = label .. bk
@@ -2088,8 +2161,17 @@ local function killAll()
     task.spawn(function()
         local c = LP.Character
         if not c then Notify("Error","No character",3); return end
-        local knife = c:FindFirstChild("Knife")
+        local knife = c:FindFirstChild("Knife") or LP.Backpack:FindFirstChild("Knife")
         if not knife then Notify("Error","Need Knife (Murderer)",3); return end
+        if knife.Parent == LP.Backpack then
+            local hum = c:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum:EquipTool(knife)
+                task.wait(0.2)
+            end
+        end
+        knife = c:FindFirstChild("Knife")
+        if not knife then Notify("Error","Failed to equip Knife",3); return end
         local events = knife:FindFirstChild("Events")
         if not events then Notify("Error","Knife.Events not found",3); return end
         local HandleTouched = events:FindFirstChild("HandleTouched")
@@ -2450,10 +2532,19 @@ do
     local sec1 = mkSection(Pages.Combat, "Gun", 1)
     mkToggle(sec1, "Auto Grab Gun", false, function(v) S.AutoGrabGun = v end, 1)
     mkAction(sec1, "Grab Gun", function() grabGun() end, 2)
+    mkToggle(sec1, "Piercing Bullet", false, function(v) S.PiercingBullet = v end, 3)
     local sec2 = mkSection(Pages.Combat, "Murderer", 2)
     mkAction(sec2, "Kill All", function() killAll() end, 1)
     mkToggle(sec2, "Knife Aura", false, function(v) S.KnifeAura = v end, 3)
     mkSlider(sec2, "Aura Range", 5, 50, 15, function(v) S.KnifeAuraRange = v end, 4)
+    local animMurderToggle
+    animMurderToggle = mkToggle(sec2, "Animation Murder", false, function(v)
+        if v then
+            playEmote(animMurderToggle, "108747312576405", "Animation Murder")
+        else
+            stopEmote(animMurderToggle)
+        end
+    end, 5)
     local sec3 = mkSection(Pages.Combat, "Sheriff", 3)
     -- Trigger Bot's firing loop lives in the auto-gun do-block below and reads S.TriggerBot.
     mkToggle(sec3, "Trigger Bot", false, function(v) S.TriggerBot = v end, 4)
@@ -2612,6 +2703,61 @@ do
         end)
     end))
 
+end
+do
+    local oldNamecall
+    local hookFunc = function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+        if (method == "FireServer" or method == "InvokeServer") and self:IsA("LuaSourceContainer") == false then
+            local className = self.ClassName
+            if className == "RemoteEvent" or className == "RemoteFunction" then
+                local tool = self:FindFirstAncestorOfClass("Tool")
+                if tool and (tool.Name == "Gun" or tool.Name == "Revolver") then
+                    if S.PiercingBullet then
+                        local murderer = nil
+                        for _, p in ipairs(Players:GetPlayers()) do
+                            if p ~= LP and p.Character and getRole(p) == "Murderer" then
+                                local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+                                local hum = p.Character:FindFirstChildOfClass("Humanoid")
+                                if hrp and hum and hum.Health > 0 then
+                                    murderer = p.Character
+                                    break
+                                end
+                            end
+                        end
+                        if murderer then
+                            local head = murderer:FindFirstChild("Head") or murderer:FindFirstChild("HumanoidRootPart")
+                            if head then
+                                local targetPos = head.Position
+                                local startPos = targetPos + Vector3.new(0, 5, 0)
+                                local newCf = CFrame.lookAt(startPos, targetPos)
+                                if #args == 3 and args[1] == 1 and typeof(args[2]) == "CFrame" and args[3] == "AH2" then
+                                    args[2] = newCf
+                                    return oldNamecall(self, table.unpack(args))
+                                elseif #args == 2 then
+                                    if typeof(args[1]) == "CFrame" and typeof(args[2]) == "Vector3" then
+                                        args[1] = newCf
+                                        args[2] = targetPos
+                                        return oldNamecall(self, table.unpack(args))
+                                    elseif typeof(args[1]) == "Vector3" and typeof(args[2]) == "Instance" then
+                                        args[1] = targetPos
+                                        args[2] = head
+                                        return oldNamecall(self, table.unpack(args))
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        return oldNamecall(self, ...)
+    end
+    if newcclosure then
+        hookFunc = newcclosure(hookFunc)
+    end
+    oldNamecall = hookmetamethod(game, "__namecall", hookFunc)
 end
 do
     local sec1 = mkSection(Pages.Motion, "Speed & Jump", 1)
@@ -3813,6 +3959,163 @@ do
     mkToggle(secC, "Free Cam", false, function(v) S.FreeCam = v; if v then startFreecam() else stopFreecam() end end, 1)
     toggleInvisible = mkToggle(secC, "Invisible (FE)", false, function(v) S.InvisibleFE = v; if v then startInvisibleFE() else stopInvisibleFE() end end, 2)
     toggleBlink = mkToggle(secC, "Blink", false, function(v) S.Blink = v; if v then startBlink() else stopBlink() end end, 3)
+
+    local animPacks = {
+        Levitation = { idle1 = '616006778', idle2 = '616008087', walk = '616013216', run = '616010382', jump = '616008936', climb = '616003713', fall = '616005863' },
+        Astronaut = { idle1 = '891621366', idle2 = '891633237', walk = '891667138', run = '891636393', jump = '891627522', climb = '891609353', fall = '891617961' },
+        Ninja = { idle1 = '656117400', idle2 = '656118341', walk = '656121766', run = '656118852', jump = '656117878', climb = '656114359', fall = '656115606' },
+        Pirate = { idle1 = '750781874', idle2 = '750782770', walk = '750785693', run = '750783738', jump = '750782230', climb = '750779899', fall = '750780242' },
+        Toy = { idle1 = '782841498', idle2 = '782845736', walk = '782843345', run = '782842708', jump = '782847020', climb = '782843869', fall = '782846423' },
+        Cowboy = { idle1 = '1014390418', idle2 = '1014398616', walk = '1014421541', run = '1014401683', jump = '1014394726', climb = '1014380606', fall = '1014384571' },
+        Princess = { idle1 = '941003647', idle2 = '941013098', walk = '941028902', run = '941015281', jump = '941008832', climb = '940996062', fall = '941000007' },
+        Knight = { idle1 = '657595757', idle2 = '657568135', walk = '657552124', run = '657564596', jump = '658409194', climb = '658360781', fall = '657600338' },
+        Vampire = { idle1 = '1083445855', idle2 = '1083450166', walk = '1083473930', run = '1083462077', jump = '1083455352', climb = '1083439238', fall = '1083443587' },
+        Patrol = { idle1 = '1149612882', idle2 = '1150842221', walk = '1151231493', run = '1150967949', jump = '1150944216', climb = '1148811837', fall = '1148863382' },
+        Elder = { idle1 = '845397899', idle2 = '845400520', walk = '845403856', run = '845386501', jump = '845398858', climb = '845392038', fall = '845396048' },
+        Mage = { idle1 = '707742142', idle2 = '707855907', walk = '707897309', run = '707861613', jump = '707853694', climb = '707826056', fall = '707829716' },
+        Werewolf = { idle1 = '1083195517', idle2 = '1083214717', walk = '1083178339', run = '1083216690', jump = '1083218792', climb = '1083182000', fall = '1083189019' },
+        Cartoony = { idle1 = '742637544', idle2 = '742638445', walk = '742640026', run = '742638842', jump = '742637942', climb = '742636889', fall = '742637151' },
+        Sneaky = { idle1 = '1132473842', idle2 = '1132477671', walk = '1132510133', run = '1132494274', jump = '1132489853', climb = '1132461372', fall = '1132469004' },
+        Stylish = { idle1 = '616136790', idle2 = '616138447', walk = '616146177', run = '616140816', jump = '616139451', climb = '616133594', fall = '616134815' },
+        Bubbly = { idle1 = '910004836', idle2 = '891633237', walk = '910034870', run = '910025107', jump = '910016857', climb = '909997997', fall = '910001910' },
+        Superhero = { idle1 = '616111295', idle2 = '616113536', walk = '616122287', run = '616117076', jump = '616115533', climb = '616104706', fall = '616108001' },
+        Stylized = { idle1 = '4708191566', idle2 = '4708192150', walk = '4708193840', run = '4708192705', jump = '4708188025', climb = '4708184253', fall = '4708186162' },
+        Popstar = { idle1 = '1212900985', idle2 = '1212954651', walk = '1212980338', run = '1212980348', jump = '1212954642', climb = '1213044939', fall = '1212900995' },
+        Wickind = { idle1 = '118832222982049', idle2 = '76049494037641', walk = '92072849924640', run = '72301599441680', jump = '104325245285198', climb = '121152442762481', fall = '121152442762481' },
+        AnimationGUI = { idle1 = '122257458498464', idle2 = '102357151005774', walk = '122150855457006', run = '82598234841035', jump = '104325245285198', climb = '10921271391', fall = '121152442762481' },
+        NFL = { idle1 = '92080889861410', idle2 = '74451233229259', walk = '110358958299415', run = '117333533048078', jump = '119846112151352', climb = '134630013742019', fall = '129773241321032' },
+        NoBoundAries = { idle1 = '18747067405', idle2 = '18747063918', walk = '18747074203', run = '18747070484', jump = '18747069148', climb = '18747060903', fall = '18747062535' },
+        CatWalkGlam = { idle1 = '133806214992291', idle2 = '94970088341563', walk = '109168724482748', run = '81024476153754', jump = '116936326516985', climb = '119377220967554', fall = '92294537340807' },
+        Bload = { idle1 = '16738333868', idle2 = '16738334710', walk = '16738340646', run = '16738337225', jump = '16738336650', climb = '16738332169', fall = '16738333171' },
+        AdidasSports = { idle1 = '18537376492', idle2 = '18537371272', walk = '18537392113', run = '18537384940', jump = '18537380791', climb = '18537363391', fall = '18537367238' }
+    }
+
+    local animNames = {}
+    for name in pairs(animPacks) do
+        table.insert(animNames, name)
+    end
+    table.sort(animNames)
+
+    local activeAnim = nil
+    local animEntries = {}
+    local resetEntry = nil
+
+    local function refreshAnimButtons()
+        if resetEntry then resetEntry.updateVisuals() end
+        for _, ent in pairs(animEntries) do
+            pcall(function() ent.updateVisuals() end)
+        end
+    end
+
+    local function applyAnim(packName)
+        local char = LP.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 then return end
+        if hum.RigType ~= Enum.HumanoidRigType.R15 then
+            Notify("Animations", "R15 Rig Type required!", 3)
+            return
+        end
+        local anims = animPacks[packName]
+        if not anims then return end
+        local animate = char:FindFirstChild("Animate")
+        if not animate then return end
+
+        animate.idle.Animation1.AnimationId = "http://www.roblox.com/asset/?id=" .. anims.idle1
+        animate.idle.Animation2.AnimationId = "http://www.roblox.com/asset/?id=" .. anims.idle2
+        animate.walk.WalkAnim.AnimationId = "http://www.roblox.com/asset/?id=" .. anims.walk
+        animate.run.RunAnim.AnimationId = "http://www.roblox.com/asset/?id=" .. anims.run
+        animate.jump.JumpAnim.AnimationId = "http://www.roblox.com/asset/?id=" .. anims.jump
+        animate.climb.ClimbAnim.AnimationId = "http://www.roblox.com/asset/?id=" .. anims.climb
+        animate.fall.FallAnim.AnimationId = "http://www.roblox.com/asset/?id=" .. anims.fall
+
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+        animate.Disabled = false
+        activeAnim = packName
+        refreshAnimButtons()
+        Notify("Animations", packName .. " applied", 2)
+    end
+
+    tc(LP.CharacterAdded:Connect(function(char)
+        task.wait(2)
+        if activeAnim then
+            pcall(applyAnim, activeAnim)
+        end
+        if currentEmoteId and currentEmoteToggle then
+            pcall(playEmote, currentEmoteToggle, currentEmoteId, currentEmoteToggle.label)
+        end
+    end))
+
+    local secAnim = mkSection(Pages.Fun, "Animations", 5)
+    resetEntry = mkAction(secAnim, "Reset to Default", function()
+        activeAnim = nil
+        refreshAnimButtons()
+        Notify("Animations", "Animations reset. Reset character to apply.", 3)
+    end, 1)
+
+    local origResetUpdate = resetEntry.updateVisuals
+    resetEntry.updateVisuals = function()
+        origResetUpdate()
+        local activeSuffix = (activeAnim == nil) and "   [ ACTIVE ]" or ""
+        local bk = resetEntry.bindKey and ("   [ " .. resetEntry.bindKey.Name .. " ]") or ""
+        resetEntry.btn.Text = "Reset to Default" .. activeSuffix .. bk
+        resetEntry.btn.TextColor3 = (activeAnim == nil) and T.Accent or T.Tx
+    end
+
+    for i, name in ipairs(animNames) do
+        local entry = mkAction(secAnim, name .. " Animation", function()
+            applyAnim(name)
+        end, i + 1)
+        animEntries[name] = entry
+
+        local origUpdate = entry.updateVisuals
+        entry.updateVisuals = function()
+            origUpdate()
+            local activeSuffix = (activeAnim == name) and "   [ ACTIVE ]" or ""
+            local bk = entry.bindKey and ("   [ " .. entry.bindKey.Name .. " ]") or ""
+            entry.btn.Text = name .. " Animation" .. activeSuffix .. bk
+            entry.btn.TextColor3 = (activeAnim == name) and T.Accent or T.Tx
+        end
+    end
+
+    refreshAnimButtons()
+
+    local secDance = mkSection(Pages.Fun, "Dance R15", 6)
+    local dances = {
+        { name = "hose", id = "99665733544814" },
+        { name = "gun", id = "107728954756412" },
+        { name = "Little Obbyist", id = "115569573258316" },
+        { name = "Dead Player", id = "88130117312312" },
+        { name = "Biblically", id = "109873544976020" },
+        { name = "Poo Animation", id = "90708290447388" }
+    }
+    for idx, dance in ipairs(dances) do
+        local toggle
+        toggle = mkToggle(secDance, dance.name, false, function(v)
+            if v then
+                playEmote(toggle, dance.id, dance.name)
+            else
+                stopEmote(toggle)
+            end
+        end, idx)
+    end
+
+    local secMock = mkSection(Pages.Fun, "Mockery Animation", 7)
+    local mockeries = {
+        { name = "Da Hood Dance", id = "115048845533448" },
+        { name = "Caramelldansen", id = "88315693621494" },
+        { name = "Default Dance", id = "88455578674030" },
+        { name = "Cute Stomach Lay", id = "80754582835479" }
+    }
+    for idx, mock in ipairs(mockeries) do
+        local toggle
+        toggle = mkToggle(secMock, mock.name, false, function(v)
+            if v then
+                playEmote(toggle, mock.id, mock.name)
+            else
+                stopEmote(toggle)
+            end
+        end, idx)
+    end
 
     -- ---- Target Actions live on the TARGETS tab (built here so they can reuse the Fun module's
     -- start/stop helpers + funTarget/skidFling). They all act on the player picked in the Targets
