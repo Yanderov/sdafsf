@@ -8,6 +8,7 @@ local TweenService = game:GetService("TweenService")
 local UIS = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local plr = PS.LocalPlayer
+local MenuKeybind = Enum.KeyCode.Insert
 
 local function Events()
 	return ReplicatedStorage:WaitForChild("Events")
@@ -811,7 +812,10 @@ tc(UIS.InputBegan:Connect(function(input, processed)
 		if input.UserInputType == Enum.UserInputType.Keyboard then
 			local e = PendingBind
 			PendingBind = nil
-			local cancel = (input.KeyCode == Enum.KeyCode.Escape or input.KeyCode == Enum.KeyCode.Backspace or input.KeyCode == Enum.KeyCode.Delete)
+			local cancel = input.KeyCode == MenuKeybind
+				or input.KeyCode == Enum.KeyCode.Escape
+				or input.KeyCode == Enum.KeyCode.Backspace
+				or input.KeyCode == Enum.KeyCode.Delete
 			if e.bindKey then BindReg[e.bindKey] = nil end
 			if cancel then
 				e.bindKey = nil
@@ -829,7 +833,7 @@ tc(UIS.InputBegan:Connect(function(input, processed)
 	if input.UserInputType == Enum.UserInputType.Keyboard then
 		local typing = false
 		pcall(function() typing = (UIS:GetFocusedTextBox() ~= nil) end)
-		if not typing then
+		if not typing and input.KeyCode ~= MenuKeybind then
 			local e = BindReg[input.KeyCode]
 			if e and e.trigger then pcall(e.trigger) end
 		end
@@ -1116,7 +1120,7 @@ local function mkToggle(parent, label, default, callback, order, noPersistState,
 		set = function(v)
 			if type(v) == "string" then
 				local kc = Enum.KeyCode[v]
-				if kc then
+				if kc and kc ~= MenuKeybind then
 					entry.bindKey = kc
 					BindReg[kc] = entry
 					entry.updateVisuals()
@@ -1172,7 +1176,7 @@ local function mkAction(parent, label, callback, order)
 		set = function(v)
 			if type(v) == "string" then
 				local kc = Enum.KeyCode[v]
-				if kc then
+				if kc and kc ~= MenuKeybind then
 					entry.bindKey = kc
 					BindReg[kc] = entry
 					entry.updateVisuals()
@@ -1689,7 +1693,7 @@ local function requestClose()
 end
 CloseBtn.MouseButton1Click:Connect(requestClose)
 
--- Toggle Menu visibility (RightShift)
+-- The menu starts hidden and is toggled explicitly with Insert.
 local MenuOpen = false
 local menuAnimating = false
 local function setMenuOpen(open)
@@ -1718,12 +1722,12 @@ local function setMenuOpen(open)
 	end
 	menuAnimating = false
 end
-tc(UIS.InputBegan:Connect(function(input, processed)
+tc(UIS.InputBegan:Connect(function(input)
 	if closing then return end
 	local typing = false
 	pcall(function() typing = (UIS:GetFocusedTextBox() ~= nil) end)
 	if typing then return end
-	if input.KeyCode == Enum.KeyCode.RightShift then
+	if input.KeyCode == MenuKeybind then
 		setMenuOpen(not MenuOpen)
 	end
 end))
@@ -2003,12 +2007,20 @@ end
 
 -- Lights & Spirit Box
 local function ToggleLightNow(on)
-	local Rooms = workspace:WaitForChild("Map"):WaitForChild("Rooms")
+	local map = workspace:FindFirstChild("Map")
+	local Rooms = map and map:FindFirstChild("Rooms")
+	local events = ReplicatedStorage:FindFirstChild("Events")
+	local useLightSwitch = events and events:FindFirstChild("UseLightSwitch")
+	if not (Rooms and useLightSwitch) then
+		Notify("Lights", "Map is not ready yet", "warn", 2.2)
+		return false
+	end
 	for _, Room in pairs(Rooms:GetChildren()) do
 		if Room:GetAttribute("LightsOn") ~= on then
-			Events():WaitForChild("UseLightSwitch"):FireServer(Room)
+			useLightSwitch:FireServer(Room)
 		end
 	end
+	return true
 end
 local function ToggleAllDaLights()
 	S.LightsOn = not S.LightsOn
@@ -2598,12 +2610,23 @@ S.ResetRoundState = function()
 	if S.DestroyGhostEsp then S.DestroyGhostEsp() end
 end
 
-task.spawn(function()
-	local Folder = workspace:WaitForChild("Handprints")
-	tc(Folder.ChildAdded:Connect(function()
-		if S.UpdateEvidenceEsp then S.UpdateEvidenceEsp() end
+do
+	local watchedHandprints
+	local function watchHandprints(folder)
+		if watchedHandprints == folder then return end
+		watchedHandprints = folder
+		tc(folder.ChildAdded:Connect(function()
+			if S.UpdateEvidenceEsp then S.UpdateEvidenceEsp() end
+		end))
+	end
+
+	local existing = workspace:FindFirstChild("Handprints")
+	if existing then watchHandprints(existing) end
+	tc(workspace.ChildAdded:Connect(function(child)
+		if child.Name == "Handprints" then watchHandprints(child) end
 	end))
-end)
+	if existing and S.UpdateEvidenceEsp then S.UpdateEvidenceEsp() end
+end
 
 ------------------------------------------------------------------
 --// PAGE: GHOST & HUNT
@@ -3646,7 +3669,7 @@ do
 	kbLbl.TextYAlignment = Enum.TextYAlignment.Top
 	kbLbl.TextWrapped = true
 	kbLbl.LineHeight = 1.3
-	kbLbl.Text = "Right Shift — show / hide menu"
+	kbLbl.Text = "Insert — show / hide menu"
 	mkToggle(panels, "Keybinds HUD", false, function(v)
 		keybindsHud.frame.Visible = v
 		NotifyToggle("Keybinds HUD", v)
@@ -3813,19 +3836,12 @@ do
 	end
 end
 
-if S._LoadConfig then S._LoadConfig() end
-
--- No staged loading screen: reveal the fully constructed window once, after
--- controls and saved appearance settings are ready.
-do
-	local openingScale = Instance.new("UIScale")
-	openingScale.Scale = 0.94
-	openingScale.Parent = Main
-	task.defer(function()
-		setMenuOpen(true)
-		TweenService:Create(openingScale, TweenInfo.new(0.24, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
-	end)
-end
+-- Config callbacks can depend on round-only folders. Restore them away from
+-- the UI thread so a missing game object can never prevent Insert from opening
+-- the menu.
+task.spawn(function()
+	if S._LoadConfig then S._LoadConfig() end
+end)
 
 -- Auto-open Main Door
 task.spawn(function()

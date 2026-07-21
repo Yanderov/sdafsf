@@ -866,10 +866,12 @@ Main.AnchorPoint = Vector2.new(0.5, 0.5)
 Main.Position = UDim2.fromScale(0.5, 0.5)
 Main.Size = UDim2.fromOffset(WW, WH)
 Main.ClipsDescendants = true
+Main.Visible = false
 Corner(Main, 14)
 Stroke(Main, T.Bd, 1, 0.1)
 Shadow(Main, 0.2)
 local mainScale = Instance.new("UIScale"); mainScale.Parent = Main
+mainScale.Scale = 0.9
 
 -- Title bar
 local TBar = Instance.new("Frame")
@@ -984,7 +986,7 @@ local btnMin = mkWinBtn("-", -52)
 -- Menu visibility drives mouse unlock: the mouse is free ONLY while this
 -- menu is open. No toggle, no Alt bind — closing the menu instantly hands
 -- the mouse back to first-person aim.
-local menuOpen = true
+local menuOpen = false
 local function setMenuVisible(v)
 	if v == menuOpen and Main.Visible == v then return end
 	menuOpen = v
@@ -1014,8 +1016,12 @@ end)
 -- btnMin's click handler is wired further down, once Sidebar/Footer/etc.
 -- exist — minimizing has to hide them explicitly (see there for why).
 btnClose.MouseButton1Click:Connect(function() setMenuVisible(false) end)
-tc(UIS.InputBegan:Connect(function(input, gameProcessed)
-	if not gameProcessed and input.KeyCode == S.MenuKeybind then setMenuVisible(not menuOpen) end
+tc(UIS.InputBegan:Connect(function(input)
+	local typing = false
+	pcall(function() typing = UIS:GetFocusedTextBox() ~= nil end)
+	if not typing and input.KeyCode == S.MenuKeybind then
+		setMenuVisible(not menuOpen)
+	end
 end))
 
 -- Window drag
