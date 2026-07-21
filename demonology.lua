@@ -166,6 +166,108 @@ local function Shadow(i, transparency)
 	return s
 end
 
+-- Lucide navigation icons (ISC): https://github.com/lucide-icons/lucide
+local NAV_ICON_DATA = {
+	["search-check"] = "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAA9hAAAPYQGoP6dpAAADEElEQVRoge2ZO09UQRiGvyHQAPVqIiZy+Q9rwg8wgQoLkEukgc5G/R2gNlATNRCDBV6IFrK1v0A7aCjcUsNmicBjceYkh29n9lx2zgph32SK2Z153/ebM2cu3xHpoYebDdMpATAkIg9EZEpERkXkji0iIse2HIrIvoh8McY0OtUMAqAKvAcaZEfD9qn+T+NjwE4O0z7sAGPdNr8KnAYwH+MUWO2G8X7glcfEGXAAPAUmgXFg2JZx+9sz2+bMw/ES6C/T/AeHaBNYAyo5uCq2T9PBt1dKEHZ0NGrASAecI5ZD40VI7/Gc19gABgJwDwCbDv6VEN7j1Ua/sBtByC/r6CBOgdEQxHqpPAgx8g6dAcd02u6U9L4ibNLBnM+gN0Lri118syPaLZNYC+jXp7muNHeLEg1x+XjwlxxLZRveWaBuy4zj/wqX94kTYLCI0EM99wOYXwLOE5x1Tzv9LrQEqtHn+G1K1T8VMZ0wtSQiWx4tjY+qPp3WwUWql7DvGYSd8Ji/EJEnni5a614R0Z/qMY572s0k5vSsy7yaNtj6UhvtCdX+R5EA/iiSYU+7us9YEfO237Dq8zvNb6jDU5+IbAFx3TVtlo0xbwLp+ZFjCs06RtmF1JFPcOaeQq6X+FjVb7s6GmPeiciyRKPrQ96Rv5XipQWuAA5V3bulW2O+IIpMG611lKNvBApsZI6XNvO0UTw1pZ26kblI9FHijAxHCWAO+GXLXAHdMEcJS3Z9D3OWrKrIyj5O3yXkcdqS6gtNjetyobHEpV8pAQN8UxphrpRWwHWp3wzxJOzIa/MQ6lKfEOpmWuUCeBTSf5zY2nOINYlWjryJrXXcia0Y58B8GUG4ngREa3eNKH04SXSeiVOLE/a357aNL7V4UXoQNpAykrsrwDzu4/dCGUGMAtsBzG+TWG2Aha4FYQWrwC7Rlp8VJ7aPc5NqE8Siz0eIT0yDEn1impboDuv6xHQkIp9F5GvaJyY74q+l9UL02BjztlO/XQGw6HkSLXfvKwtPEM580pUFGRNiVxqkpCR76OGm4x9F0gpf3g8C9gAAAABJRU5ErkJggg==",
+	["ghost"] = "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAA9hAAAPYQGoP6dpAAACW0lEQVRoge2YvW7UQBSF76BsQ0KbJluQ5CGCxAMghYqVUJpFNOQB4AV4ggRoQk1FCij4EaIKNU9BhYRpkCCsdkXYL8XOSvZlxju2xx4h+UiW1vaZc+6xrsczK9IjLUwsIWBdRG6JyL6IbIvIlj1ERL7a44uIfBCRj8aYSSzvRgD2gNfAhHBM7Ji9lIXvAKcVivbhFNjpuvhDYBah+CVmwGEXha8BzzxFXABnwEPgJrALbNhj1157ZDkXHo2nwFqbxb91mE6BI2CzgtamHTN16L1pJYR9OhqfgGEDzaHV0HgSs/Zlz2ucAIMI2gPguUP/QYzal7ONfmFPoogXfXSIGbAdQ1hPlWcxnrzDZ+Bop5dNRW8owSkNej7Ab8i/L3b9jx2Lr2UeRxHr9XkeK89XdYXWKS4P/lBhqqwLFlNs/jvxG7haR2ike7+Fen3e+l244+NeKdHZV+fv45QXhHfq/LaPWBZAT2Gfa5dTHdrruo9YFmBLnX9zkWyrZcB34O6qygL52YpaVgP4pfpww8PLcpwfQNlDCeKzWADm8dOnV2ZWKNgYc15WWEw4vK5VFlFPgBJeGy0U7O/dE+tBxpho++cQhPqX9uv/gD5AavQBUqMPkBp9gNToA6RGHyA1KgcADuxyOAMed8WrDNd6HBgDf9WtsWNsY17ofiA4gMcMe22cGxeFFxogeEMjInPxt9xcRO7b3y8i8Qr3fBuaKgGSIuaObC4i9+wx75BXDY7ebK3fA3hRXuKCWYlpbF7tANkqsxw3P5cfRODpEPqfuqAAoxCztqDCjrr27xGKS3Ij99QOg5VTAAAAAElFTkSuQmCC",
+	["workflow"] = "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAA9hAAAPYQGoP6dpAAABQElEQVRoge2YPbLCMAyEZSpShHuRQ3EB+vc4Dy3HoQjdUmAYY/JnBVliRl+XjKXszjiONkSO44wCoANwBtBjnj6u7bR1E4AGwGmB6DH+ATSaBtaIf5nQEt99QfyT+tsJj32ccgTQLqhr49qUcw3NuZD8hZ0Vn9S2WW0vqZWIKAyIwNuCED7WTLG2vpSNZPMauAFt3IA2bkCbIQO39KL0QzbVS4IhA5fs+rB0lCCiw0wvefDdYW5f3UA08bvjdDTQ4BFKuPxBM9AkRjiRUmfbLCVXXVirn7E5BmApYzMN2DkUSg3AWsZmGLCVsRkGRDN2cV6NTbbJrV0I4TqxXjRjc6ZR1qxkBqx8KRnPW1U/1pR9LFoxwJ6VTBhImpeMBiIGRP+aPQW8PdDAKWSKGgZEM3YNA56xEzxjcw14xnYcZ5g7XVGu8/zX9zgAAAAASUVORK5CYII=",
+	["scan-eye"] = "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAA9hAAAPYQGoP6dpAAACsElEQVRoge2Zz2oUQRDGa8TLRvcSFKK+QPYS/HORqJAoKK6XkCcwGh9CD3kBbxsweQkNmJPejB4ke8lLGIgR1E1gAwn5eZgK6e3tmenZ6f2H88HCzkzVV18ttTXV3SIlSpRIBFAHtoA23dgDFgPEWFQuG22NXe+FtAKsO0i7kgiQgEu8jTWgkofUR/wgEwBY8yWs+4qnvyXkQnY5EdedibdAtajQvACqGtvElo+j/YcduHhDS9XS0rZtIocTHQZR1GUzSGTpuTBYOeFxMRSRltpjEXkgIndF5LqIXNHHv0RkV0S+i8hXEfkcRdFBqNi2kA542NeI2+6BZydBbdeBWmg9dl9O7PPAJLAKnOQQbuNEOSaL6jEdzvpyYp8H7gG7BYTb+AHM9qonF4Bl4DhByDbwGpgDbhCPJBX9PqfPthN8j4GXhQVmiH+REPwjMJODZ0Z9XFjql/hnwKkV7C+wUIBzQTlMnNLLBJoR6BqwbwXaA6YDcE/TPQv9BKZCaD8L8sEKcAjcTLG/RNxdWvppABMp9reU08T7UOLvOOp0OUP8jsNnJyOJVw6f2yES2LBIvwCJ85H+8klYTfGLlNvERogE/likDzPsWykJtDJ8H1n2v7P0jf0wl4nAJdRI8etbCY33n1jJ87bRCeLWOfw2qgGmiF8uJsbnRaaBxneUMAIuOeoUYJP8w9xmAtfzvog3gqeN003gDTBP9zg9r8+aCb5hxmn8FjSzxIuQUAi3oCHfkrJB8SVlg8BLyg542NeIN1/zLOpb6lN4UR9sYwu4LCJPROS+nG+rXNXH+3K+rfJNRD5FUXToyZuqp9yZGzZcCRyZFwx5c9e6dWTbuBJoWtcrw0hCY65Yt21tTsdRPuB46ks6vkdMSloh7tOjksA78hzyGeSjcMzqVzYlSvyn+AemqJB9pScXYgAAAABJRU5ErkJggg==",
+	["footprints"] = "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAA9hAAAPYQGoP6dpAAAD5klEQVRoge2Yu29cRRTGvzGvGNgYCUEAIx5FOkMDEsYBFCEgJA1EiIY/gVDwEG0qWgoKCBiQUiNAbihSIeKYxgaEQgMSoYp4RMiRhTDEsX8Ud9ea/XbuzL3GuwtSvmrP3O+cOWde38xKV/A/AjAHnASWgVXgIrACvA5MjTu/WgD7gSXyOAfMjDvXAQCHuyPdBOeBW8ed8zaAWeDvhsn3MD/uvCVJwL7uiMa4BLwHPABcB9wIHAM2I84f/Bf2A/CBJX8BOFDDnTfui6PO1xOasVG9DDya4R+yAhZGmW8qoQ8tobcK/GnjfzOqXFPJXA+sRclsAHcUfCatgIsF/hSVdqxQnXCrVNpyEpj7twUctWRONfC5wXzWM9wZKs3IYQnY3yTfiUSbb9TPGsTxs3+1Jvl9kk5JurcQb07SMnC41HGqgIfMbrKefbQu1PDekJRdjhGmJC0Ank8fUgXcbfYPDTp72OyzTqDShheipi1JL0nqSNoj6UFJ85I2Is61kj6ljbpTiVWMqxv4nDGf1xKcY8ZJKjZwgEpzYrzfpoB1c+4U+H6EAtyX4C0Y56lMzMfo16FNai6KqSX0u9nTuQIkPWf2OUnfJXj3mJ3iSJJCCKclvR01TUh6uZBHBeBbG6knCvxF479Zw/Mb7WQh7jSVBvWwlvJJzYCfIL5B405u1+CxW3eN2NOg722EEM5L+jxq6kg65LxUkK/MHnCK8IykENm/SfqyhuvacEsmbg+uQQOXyVQBX5g9S/31+KjZH4cQNmu4PrNNlNY1aNYJqQLOSLoc2VdJOugk4CZJj1vzR5lkXBtql2aE782+ywkDBYQQ1iQtWnNqIz8tKdaIX1QVX4evzX4yw+3BT8TbGvhIwKuJs72E7FMSuN/4W5RvuXvN50/n1J0EK40q7YfPmuOspJ8iO2hQQxyuQT4jtQX8WAicgi+RPoQQ0OAR+3wh5p1mNy7g50Lgnfp4AY8AuXXtG33glpssIISwlWjrQ8It+wrrYkmVVmyHVaUldXANco3Kq2EbpIpOcDYlfWLNriWStq/f/hZwjaqHHzFtv2fiHjTXSymhBJ413gaw13m7NgMtsCjp18i+RpWmOFx7Frsa1Qxk3gVAx77VPuJrYvsfYU3wSipWbgaWzT7eTbwj6XiBW0JOsevQTpuAIy1Gp/jvgcWe2cEMNP0zoK+jdxsEPrGDuDfvoIDU0V3saBI4kQn6DoWXVU3cCQ+U4GS/t+3wCHCaamOvd3+3WjZtE2xaQPtp2SV4Uq7upe89jEMHdhXjLOCv2MB0JseNMc4ChqkzwwdD1JmRgSHpzMjAkHRm5GAIOnMFo8I/gRRKTmfTyMsAAAAASUVORK5CYII=",
+	["map-pin"] = "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAA9hAAAPYQGoP6dpAAADzUlEQVRoge2ZuWsVURTGzzMLIQkICmI0TRJRglopRkyRRnFBcSlU0FIt4ob+AdooBCEujTZWLtFCCxdERGMnWGiaB4oBRUHraBZeFvlZzJ0wOXPvfXnz7str/GCKO/Od73xn3p27PZH/qC5yoYSAJhHZLiK7RKRNRFaaS0Tkp7m+icgLEXmZy+UmQuUuC0AX8BiYYP6YMDFd1TTeDjwswbQLD4H2hTZ/HJgMYD7GJHB8IYzXAjccJmaAQeAc0A10AM3m6jD3zhvOjEPjOlBbSfNPLUkLQD+wrAStZSamYNF7UpEizNvReAu0lqHZajQ0roX0Hvd5jZtAXQDtOuCWRf9YCO/xaKM/2JtBxOfm0UVMAm0hhPVQORjizVvy1Fm604NyRTcrwQJF+jzQAvQBeWDKXHlzr6VIbCvpDzv7ZEc0WybR7+HmgJPAGG6MGY5zCQNcVTGPsppvYu7yYBrHUGnM68Q+XHUVQTTEJueJcaAxSwEHVNJBD/dkCeZj9Hr03iru/iwF3FYi5x28FtLd5j3QAzSYq8fcS2IUxzdBNGMncTtLAW+USLeD12cxX2Ph1ViK6HNodive6ywFfFYiHQ5eXvF6PJo9ipt38FYp3qcsBYwqkWYHb0rxGjyaDYo75eA1K94fl+YiTw31ql3wcEND59JeZuErYES1XavNL6rtm3j0Mx3ryqW9zMJXwHfVXufgPVftKzg+YhG5UiQ2xvoiXmbhK2BItTc7eDdEZDzR3iQi71DDqIi8M89ijJlYG3Qu7aU4gIN6JMA9ewabyIhm9U+KezBLAY2kJ6gNnqSlLCX6PS9jo+KOkmUpYcTuKzHXTx4X0Ut6+NVmel3mjY7ec9/LZN6I7VFiY8DyIjHlLKeXk/7Vd5dTQB0wrASD78YS+fSubJhyN0/AYSU6A6wO5DmZZw3p45ZDIYQXAUNK+BXgG4Kz5HilcgwFywHsJI0zQcQj/bMW/Z2h9OMkenNfANYG0F1Heh9c3mbekWgp8EslygOLy9BcTHo5/gtYEtJ7MqGtK70GnKtFj1Y90RGNxo5KeE8mth0x3sEzOVk0csBdi871SnqPk9cCzyzJL5WgcdkS/xTLKrYiINoxfbSYODGP2BOWuA84dnwVA7AC+KGMzAB7PTH7gL8q5gdFlhgVA7Ae+G0p4oiFe5T0TPsbcG2UFgbANqJTO41TCc5py/NpYGs1vc8COGLpGgAXgIuW+9ZfqaoA9jO/P/4myXJUuBAw3WncY34c2FZtn14QHQuOWMyPAFuq7W9eADqBAeCruQaAzmr7+o9K4B/zGryOBIgdTQAAAABJRU5ErkJggg==",
+	["wrench"] = "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAA9hAAAPYQGoP6dpAAAC8ElEQVRoge2YQUgUURjH/yNSEERFhBSBKGkIRUEXkY5SkAVCZYLHBK+Bh64ldAvqEhRBUGR0C6JbBoJSFlFdhBLyVEknEy2SXH8d5m1Mn29mR93dmYX9wx5mvv+87/fevLfveyPVla2CaiYDOiT1SDouqV3SPhdalDQjaUrS9SAI5qvJlSggAHqBV6TTF2BP1tySJKAFmEgJHtVI1uwCTgI/SoAWYu6Pp83TUCH4HklPJe0woRVJ9ySdltQmaaukIU8T3yrBlUpAG7DkGdVRoNl4+z1voQAczQq+AZjywF8BAuONg+/PBN5B9Xnghz2+/ME7sA8GamyzIw8cAR4B48AIlfqLBQ4ZqJ9Ai/F0rhPe19mvwK5KdOCySXTf45ncJHxR1yrRgScmyXkTbzRAG4UHGCt6y7kPtJvr5yX83tyuU6NxcaeD6+BKJ2AuMkILMZ7EKRQz8gVgyNwrf7EHfI8kWIzxxC7iBPh+1k6/inTgo0m+P8YXB2r17+0AB0xsutheOdfArLnu8ZmCIHgsaUDSauS25ViVNOC80to5PxP34Gb01lyfiTPGdKIoCy9JZ41nckOESQJumtf8G9hS4plOwoVdcL9JoNN4moE/pu2OcsP75vUC0Jjy+Uafl/A0N2ranaoGfAG4UIa2r3oWd285uIsJKlJVupEf9sBPYIrDqsG7aZK4JpyvFXjhgZ/HFIfVhO8jXBNFDQJ7I/GdzvOAsIq1WgZOZAWfVJgtupFN0hJwKo/wafQGsEViTcC/J5xSJTfaVCsaf4nr2zFL+W9JWpJ0TFKrws8uK5LmJX2S9FrSsyAIplUulWnkszmw1+Hr8BtQrcN31zL8NmC2JuEd0KWahXdQDw3QYIwvf/AO7F0EaA5P3Z1beAc3FoFaBppMPL/wkgTcMHAvgSbC09HFXMNLEtDFWi3z/yfDfMIXBdzxwNYGvCQB24HbCfCfge6sOaPyngeALknnJB2WtFvStMIvb3eDIPhVPby68q+/skEi4gAI/58AAAAASUVORK5CYII=",
+	["panels-top-left"] = "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAA9hAAAPYQGoP6dpAAAA8klEQVRoge2ZQQ6DIBREsenOy9XzuPcYchp3vZBupgvbhP5iUKMMpvN2mk+cFz6SgHNCiEUANAAGACPyM76/3ewJXgPwhNBLeAD1FgHPzRul39I2pZJuJ8x9F9Jhy/QdBOY27kyWYc1Au2Czhw+y1CbLaGuqyCB8FVTVT01OUnlueeMcjwTYSIDNPVVg/wKlcfkZkACb5BpI7cRn79ypNXj5GZAAGwmwkQAbCbCRABsJsJEAGwmwiQlM4QP7cNe8mmxNTOBpnlvW8bpzrjWvbbbowJIvOB5r7T07aYR1V0yf6QPQsxMH9NjTxrjqNasQf8QLDxQVmh4AoMEAAAAASUVORK5CYII=",
+}
+local NAV_ICON_CACHE = {}
+
+local function decodeNavIcon(data)
+	local env = (getgenv and getgenv()) or _G
+	local cryptApi = env and env.crypt
+	local decoder
+	if type(cryptApi) == "table" then
+		if type(cryptApi.base64) == "table" then decoder = cryptApi.base64.decode end
+		if type(decoder) ~= "function" then decoder = cryptApi.base64decode end
+	end
+	local synApi = env and env.syn
+	if type(decoder) ~= "function" and type(synApi) == "table" and type(synApi.crypt) == "table"
+		and type(synApi.crypt.base64) == "table" then
+		decoder = synApi.crypt.base64.decode
+	end
+	if type(decoder) ~= "function" and env then decoder = env.base64_decode end
+	if type(decoder) == "function" then
+		local ok, decoded = pcall(decoder, data)
+		if ok and type(decoded) == "string" then return decoded end
+	end
+
+	local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+	local lookup = {}
+	for index = 1, #alphabet do lookup[string.byte(alphabet, index)] = index - 1 end
+	local output = {}
+	for index = 1, #data, 4 do
+		local a = lookup[string.byte(data, index)] or 0
+		local b = lookup[string.byte(data, index + 1)] or 0
+		local cByte, dByte = string.byte(data, index + 2), string.byte(data, index + 3)
+		local c, d = lookup[cByte] or 0, lookup[dByte] or 0
+		local packed = a * 262144 + b * 4096 + c * 64 + d
+		output[#output + 1] = string.char(math.floor(packed / 65536) % 256)
+		if cByte and cByte ~= 61 then output[#output + 1] = string.char(math.floor(packed / 256) % 256) end
+		if dByte and dByte ~= 61 then output[#output + 1] = string.char(packed % 256) end
+	end
+	return table.concat(output)
+end
+
+local function MakeNavIcon(parent, kind)
+	local data = NAV_ICON_DATA[kind]
+	local getter = getcustomasset or getsynasset
+	if not data or type(getter) ~= "function" or type(writefile) ~= "function" then return nil end
+	local path = "InertiaAssets/lucide48_" .. string.gsub(kind, "%-", "_") .. ".png"
+	local exists = false
+	if type(isfile) == "function" then
+		local ok, result = pcall(isfile, path)
+		exists = ok and result == true
+	end
+	if not exists then
+		pcall(function()
+			if type(makefolder) == "function" and (type(isfolder) ~= "function" or not isfolder("InertiaAssets")) then
+				makefolder("InertiaAssets")
+			end
+		end)
+		local ok = pcall(writefile, path, decodeNavIcon(data))
+		if not ok then return nil end
+	end
+	local asset = NAV_ICON_CACHE[kind]
+	if not asset then
+		local ok, result = pcall(getter, path)
+		if not ok or type(result) ~= "string" then return nil end
+		asset = result
+		NAV_ICON_CACHE[kind] = asset
+	end
+
+	local slot = Instance.new("Frame")
+	slot.Name = "NavIconSlot"
+	slot.Parent = parent
+	slot.Position = UDim2.new(0, 8, 0.5, -11)
+	slot.Size = UDim2.fromOffset(22, 22)
+	slot.BackgroundColor3 = T.Elev
+	slot.BackgroundTransparency = 1
+	slot.BorderSizePixel = 0
+	Corner(slot, 6)
+
+	local image = Instance.new("ImageLabel")
+	image.Name = "NavIcon"
+	image.Parent = slot
+	image.AnchorPoint = Vector2.new(0.5, 0.5)
+	image.Position = UDim2.fromScale(0.5, 0.5)
+	image.Size = UDim2.fromOffset(16, 16)
+	image.BackgroundTransparency = 1
+	image.BorderSizePixel = 0
+	image.Image = asset
+	image.ImageColor3 = T.Tx3
+	image.ImageTransparency = 0.06
+	image.ScaleType = Enum.ScaleType.Fit
+	return { slot = slot, image = image }
+end
+
+
 -- Root GUI Setup
 local SG = Instance.new("ScreenGui")
 SG.Name = "Demonology"
@@ -205,7 +307,7 @@ nLayout.Padding = UDim.new(0, 8)
 local refreshSB
 local openAppearance
 local UIStyle = {
-	BackgroundRoles = { "BG", "Sidebar", "Card", "Elev", "Hover", "ActiveBg", "TgOff", "TgOn", "KnobOff", "KnobOn", "Accent", "White" },
+	BackgroundRoles = { "BG", "Sidebar", "Card", "Elev", "Hover", "ActiveBg", "Bd", "Bd2", "Tx3", "Tx4", "TgOff", "TgOn", "KnobOff", "KnobOn", "Accent", "White" },
 	TextRoles = { "White", "Tx", "Tx2", "Tx3", "Tx4", "Accent", "Good", "Bad", "Warn" },
 	StrokeRoles = { "Bd", "Bd2", "Accent", "White", "Tx", "Tx2", "Tx3", "Good", "Bad", "Warn" },
 }
@@ -592,17 +694,19 @@ local function mkSBItem(name, iconKind, page, order)
 	bar.BorderSizePixel = 0
 	bar.Visible = false
 	Corner(bar, 2)
+	local icon = MakeNavIcon(btn, iconKind)
 	local label = Instance.new("TextLabel")
 	label.Parent = btn
 	label.BackgroundTransparency = 1
-	label.Position = UDim2.new(0, 13, 0, 0)
-	label.Size = UDim2.new(1, -20, 1, 0)
+	label.Position = UDim2.new(0, icon and 36 or 13, 0, 0)
+	label.Size = UDim2.new(1, icon and -42 or -20, 1, 0)
 	label.Font = F
-	label.TextSize = 15
+	label.TextSize = 13
 	label.TextColor3 = T.Tx2
 	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.TextTruncate = Enum.TextTruncate.AtEnd
 	label.Text = name
-	local item = { btn = btn, bar = bar, label = label, page = page }
+	local item = { btn = btn, bar = bar, icon = icon, label = label, page = page }
 	btn.MouseButton1Click:Connect(function()
 		for _, pg in pairs(Pages) do
 			pg.Visible = (pg == page)
@@ -626,10 +730,16 @@ refreshSB = function()
 	for _, item in ipairs(SBItems) do
 		local on = (item.page == activePage)
 		item.bar.Visible = on
+		if item.icon then
+			item.icon.image.ImageColor3 = on and T.White or T.Tx3
+			item.icon.image.ImageTransparency = on and 0 or 0.06
+			item.icon.slot.BackgroundColor3 = on and T.ActiveBg or T.Elev
+			item.icon.slot.BackgroundTransparency = on and 0.24 or 1
+		end
 		item.label.TextColor3 = on and T.White or T.Tx2
 		item.label.Font = on and FM or F
-		item.btn.BackgroundColor3 = T.Elev
-		item.btn.BackgroundTransparency = on and 0 or 1
+		item.btn.BackgroundColor3 = on and T.ActiveBg or T.Elev
+		item.btn.BackgroundTransparency = on and 0.16 or 1
 	end
 end
 
@@ -643,34 +753,67 @@ mkPage("Misc")
 mkPage("HUD")
 Pages["Evidence"].Visible = true
 activePage = Pages["Evidence"]
-mkSBItem("Evidence", "eye", Pages["Evidence"], 1)
+mkSBItem("Evidence", "search-check", Pages["Evidence"], 1)
 mkSBItem("Ghost & Hunt", "ghost", Pages["Ghost & Hunt"], 2)
-mkSBItem("Automation", "cross", Pages["Automation"], 3)
-mkSBItem("ESP", "grid", Pages["ESP"], 4)
-mkSBItem("Movement", "sliders", Pages["Movement"], 5)
-mkSBItem("Teleport", "diamond", Pages["Teleport"], 6)
-mkSBItem("Misc", "shield", Pages["Misc"], 7)
-mkSBItem("HUD", "server", Pages["HUD"], 8)
+mkSBItem("Automation", "workflow", Pages["Automation"], 3)
+mkSBItem("ESP", "scan-eye", Pages["ESP"], 4)
+mkSBItem("Movement", "footprints", Pages["Movement"], 5)
+mkSBItem("Teleport", "map-pin", Pages["Teleport"], 6)
+mkSBItem("Misc", "wrench", Pages["Misc"], 7)
+mkSBItem("HUD", "panels-top-left", Pages["HUD"], 8)
 do
 	local card = Instance.new("Frame")
 	card.Name = "QuickStatus"; card.Parent = SB; card.LayoutOrder = 100
-	card.Size = UDim2.new(1, 0, 0, 74); card.BackgroundColor3 = T.Card; card.BorderSizePixel = 0
-	Corner(card, 9); Stroke(card, T.Bd2, 1, 0.34)
-	Grad(card, T.White:Lerp(T.Accent, 0.12), T.White:Lerp(T.Elev, 0.08), 90)
+	card.Size = UDim2.new(1, 0, 0, 94); card.BackgroundColor3 = T.Card; card.BorderSizePixel = 0
+	Corner(card, 9); Stroke(card, T.Bd2, 1, 0.28)
+	local headMark = Instance.new("Frame")
+	headMark.Parent = card; headMark.Position = UDim2.fromOffset(9, 7); headMark.Size = UDim2.fromOffset(2, 11)
+	headMark.BackgroundColor3 = T.Accent; headMark.BorderSizePixel = 0; Corner(headMark, 2)
 	local heading = Instance.new("TextLabel")
 	heading.Parent = card; heading.BackgroundTransparency = 1
-	heading.Position = UDim2.fromOffset(10, 5); heading.Size = UDim2.new(1, -20, 0, 15)
-	heading.Font = FB; heading.TextSize = 9; heading.TextColor3 = T.Tx3
+	heading.Position = UDim2.fromOffset(17, 4); heading.Size = UDim2.new(1, -35, 0, 18)
+	heading.Font = FB; heading.TextSize = 10; heading.TextColor3 = T.Tx2
 	heading.TextXAlignment = Enum.TextXAlignment.Left; heading.Text = "QUICK STATUS"
-	local bodyText = Instance.new("TextLabel")
-	bodyText.Parent = card; bodyText.BackgroundTransparency = 1
-	bodyText.Position = UDim2.fromOffset(10, 21); bodyText.Size = UDim2.new(1, -20, 1, -25)
-	bodyText.Font = FM; bodyText.TextSize = 10; bodyText.TextColor3 = T.Tx2
-	bodyText.TextXAlignment = Enum.TextXAlignment.Left; bodyText.TextYAlignment = Enum.TextYAlignment.Top; bodyText.LineHeight = 1.25
+	local stateDot = Instance.new("Frame")
+	stateDot.Parent = card; stateDot.AnchorPoint = Vector2.new(1, 0.5)
+	stateDot.Position = UDim2.new(1, -9, 0, 13); stateDot.Size = UDim2.fromOffset(5, 5)
+	stateDot.BackgroundColor3 = T.Accent; stateDot.BorderSizePixel = 0; Corner(stateDot, 5)
+	local divider = Instance.new("Frame")
+	divider.Parent = card; divider.Position = UDim2.fromOffset(9, 25); divider.Size = UDim2.new(1, -18, 0, 1)
+	divider.BackgroundColor3 = T.Bd; divider.BackgroundTransparency = 0.48; divider.BorderSizePixel = 0
+	local body = Instance.new("Frame")
+	body.Parent = card; body.BackgroundTransparency = 1
+	body.Position = UDim2.fromOffset(0, 27); body.Size = UDim2.new(1, 0, 1, -29)
+	local function statusRow(keyText, index)
+		local row = Instance.new("Frame")
+		row.Parent = body; row.BackgroundTransparency = 1
+		row.Position = UDim2.new(0, 9, 0, (index - 1) * 21); row.Size = UDim2.new(1, -18, 0, 21)
+		if index > 1 then
+			local line = Instance.new("Frame")
+			line.Parent = row; line.Size = UDim2.new(1, 0, 0, 1)
+			line.BackgroundColor3 = T.Bd; line.BackgroundTransparency = 0.62; line.BorderSizePixel = 0
+		end
+		local key = Instance.new("TextLabel")
+		key.Parent = row; key.BackgroundTransparency = 1; key.Size = UDim2.new(0, 48, 1, 0)
+		key.Font = F; key.TextSize = 9; key.TextColor3 = T.Tx4; key.TextXAlignment = Enum.TextXAlignment.Left; key.Text = keyText
+		local value = Instance.new("TextLabel")
+		value.Parent = row; value.BackgroundTransparency = 1; value.Position = UDim2.fromOffset(48, 0)
+		value.Size = UDim2.new(1, -48, 1, 0); value.Font = FM; value.TextSize = 10; value.TextColor3 = T.Tx
+		value.TextXAlignment = Enum.TextXAlignment.Right; value.TextTruncate = Enum.TextTruncate.AtEnd; value.Text = "--"
+		return value
+	end
+	local roundValue = statusRow("ROUND", 1)
+	local huntsValue = statusRow("HUNTS", 2)
+	local networkValue = statusRow("PING", 3)
 	task.spawn(function()
-		while bodyText.Parent do
+		while card.Parent do
 			local ping = math.floor((plr:GetNetworkPing() or 0) * 1000 + 0.5)
-			bodyText.Text = "ROUND   " .. (S.Ready and "ACTIVE" or "WAITING") .. "\nHUNTS   " .. tostring(S.HuntsCount or 0) .. "\nNETWORK   " .. tostring(ping) .. " ms"
+			roundValue.Text = S.Ready and "ACTIVE" or "WAITING"
+			roundValue.TextColor3 = S.Ready and T.Accent or T.Tx3
+			stateDot.BackgroundColor3 = S.Ready and T.Accent or T.Tx4
+			stateDot.BackgroundTransparency = S.Ready and 0 or 0.45
+			huntsValue.Text = tostring(S.HuntsCount or 0)
+			networkValue.Text = tostring(ping) .. " ms"
 			task.wait(0.75)
 		end
 	end)
