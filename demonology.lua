@@ -39,8 +39,9 @@ local S = {
 	Ready = false,
 	GhostEspOn = false,
 	HuntsCount = 0,
-	UITheme = "Graphite",
+	UITheme = "Default",
 	UITextScale = 1,
+	HUDScale = 1,
 	NotificationPosition = "Top Center",
 }
 local hudLocked = false
@@ -56,6 +57,13 @@ local function tc(conn)
 end
 
 local THEMES = {
+	Default = {
+		BG=Color3.fromRGB(3,3,3), Sidebar=Color3.fromRGB(4,4,4), Card=Color3.fromRGB(8,8,8), Elev=Color3.fromRGB(13,13,13),
+		Hover=Color3.fromRGB(19,19,19), ActiveBg=Color3.fromRGB(26,26,26), Bd=Color3.fromRGB(20,20,20), Bd2=Color3.fromRGB(40,40,40),
+		White=Color3.fromRGB(255,255,255), Tx=Color3.fromRGB(238,238,236), Tx2=Color3.fromRGB(214,213,210), Tx3=Color3.fromRGB(180,179,175), Tx4=Color3.fromRGB(154,153,149),
+		Accent=Color3.fromRGB(216,215,211), Glow=Color3.fromRGB(145,144,141), TgOff=Color3.fromRGB(29,29,29), TgOn=Color3.fromRGB(176,176,174),
+		KnobOff=Color3.fromRGB(137,136,133), KnobOn=Color3.fromRGB(250,249,246), AccentSoft=Color3.fromRGB(72,72,71),
+	},
 	Graphite = {
 		BG=Color3.fromRGB(32,32,32), Sidebar=Color3.fromRGB(38,38,38), Card=Color3.fromRGB(44,44,44), Elev=Color3.fromRGB(52,52,52),
 		Hover=Color3.fromRGB(62,62,62), ActiveBg=Color3.fromRGB(74,74,74), Bd=Color3.fromRGB(58,58,58), Bd2=Color3.fromRGB(80,80,80),
@@ -107,17 +115,18 @@ local THEMES = {
 }
 local T = {}
 local function loadPalette(name)
-	local source = THEMES[name] or THEMES.Graphite
+	local source = THEMES[name] or THEMES.Default
 	for key in pairs(T) do T[key] = nil end
 	for key, value in pairs(source) do T[key] = value end
-	T.TgOff = T.Bd2:Lerp(T.Card, 0.35)
-	T.TgOn = T.Accent
-	T.KnobOff = T.Tx2
-	T.KnobOn = T.White
+	T.TgOff = source.TgOff or T.Bd2:Lerp(T.Card, 0.35)
+	T.TgOn = source.TgOn or T.Accent
+	T.KnobOff = source.KnobOff or T.Tx2
+	T.KnobOn = source.KnobOn or T.White
+	T.AccentSoft = source.AccentSoft or T.Accent:Lerp(T.Card, 0.68)
 	T.Good = T.Accent
 	T.Bad = Color3.fromRGB(255, 92, 92)
 	T.Warn = Color3.fromRGB(255, 192, 88)
-	return THEMES[name] and name or "Graphite"
+	return THEMES[name] and name or "Default"
 end
 S.UITheme = loadPalette(S.UITheme)
 local F  = Enum.Font.Gotham
@@ -274,7 +283,8 @@ SG.Name = "Demonology"
 SG.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 SG.ResetOnSpawn = false
 SG.DisplayOrder = 2147483647
-SG.IgnoreGuiInset = true
+SG.IgnoreGuiInset = false
+pcall(function() SG.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets end)
 
 if RS:IsStudio() then
 	SG.Parent = plr:WaitForChild("PlayerGui")
@@ -332,14 +342,22 @@ function UIStyle:ApplyTheme(name)
 		if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
 			self:ReplaceColor(object, "TextColor3", oldPalette, self.TextRoles)
 			if object:IsA("TextBox") then self:ReplaceColor(object, "PlaceholderColor3", oldPalette, self.TextRoles) end
-		elseif object:IsA("ImageLabel") or object:IsA("ImageButton") then
+		elseif (object:IsA("ImageLabel") or object:IsA("ImageButton")) and not object:GetAttribute("StaticThemeColor") then
 			self:ReplaceColor(object, "ImageColor3", oldPalette, self.TextRoles)
 		elseif object:IsA("ScrollingFrame") then
 			self:ReplaceColor(object, "ScrollBarImageColor3", oldPalette, self.TextRoles)
 		elseif object:IsA("UIStroke") then
 			self:ReplaceColor(object, "Color", oldPalette, self.StrokeRoles)
 		elseif object:IsA("UIGradient") and object.Parent and object.Parent:IsA("GuiObject") then
-			object.Color = ColorSequence.new(T.White:Lerp(T.Accent, 0.12), T.White:Lerp(T.Elev, 0.08))
+			if object.Name == "HUDHeaderGradient" then
+				object.Color = ColorSequence.new(T.White:Lerp(T.Accent, 0.14), T.White:Lerp(T.Card, 0.06))
+			elseif object.Name == "QuickStatusGradient" then
+				object.Color = ColorSequence.new(T.White:Lerp(T.Accent, 0.16), T.White:Lerp(T.Elev, 0.08))
+			elseif object.Name == "DynamicIslandGradient" then
+				object.Color = ColorSequence.new(T.White:Lerp(T.Accent, 0.14), T.White:Lerp(T.Card, 0.08))
+			else
+				object.Color = ColorSequence.new(T.White:Lerp(T.Accent, 0.12), T.White:Lerp(T.Elev, 0.08))
+			end
 		end
 	end
 	if refreshSB then pcall(refreshSB) end
@@ -356,6 +374,22 @@ function UIStyle:ApplyTextScale(scale)
 				pcall(function() object:SetAttribute("DemonologyOriginalTextSize", original) end)
 			end
 			object.TextSize = math.clamp(math.floor(original * S.UITextScale + 0.5), 8, 28)
+		end
+	end
+	if S._refreshAppearance then pcall(S._refreshAppearance) end
+end
+
+function UIStyle:ApplyHUDScale(scale)
+	S.HUDScale = math.clamp(tonumber(scale) or 1, 0.8, 1.3)
+	for _, object in ipairs(SG:GetDescendants()) do
+		if object:IsA("GuiObject") and object:GetAttribute("ScalableHUD") == true then
+			local scaler = object:FindFirstChild("HUDUserScale")
+			if not scaler then
+				scaler = Instance.new("UIScale")
+				scaler.Name = "HUDUserScale"
+				scaler.Parent = object
+			end
+			scaler.Scale = S.HUDScale
 		end
 	end
 	if S._refreshAppearance then pcall(S._refreshAppearance) end
@@ -621,17 +655,34 @@ Pad(SB, 8, 8, 8, 8)
 do
 local ProfileButton = Instance.new("TextButton")
 ProfileButton.Name = "Profile"; ProfileButton.Parent = SB; ProfileButton.LayoutOrder = -100
-ProfileButton.Size = UDim2.new(1, 0, 0, 50); ProfileButton.BackgroundColor3 = T.Card
+ProfileButton.Size = UDim2.new(1, 0, 0, 54); ProfileButton.BackgroundColor3 = T.Card
 ProfileButton.BorderSizePixel = 0; ProfileButton.AutoButtonColor = false; ProfileButton.Text = ""
-Corner(ProfileButton, 9); Stroke(ProfileButton, T.Bd2, 1, 0.34)
+Corner(ProfileButton, 10); Stroke(ProfileButton, T.Bd2, 1, 0.35); Shadow(ProfileButton, 0.45)
+local ProfileAvatar = Instance.new("ImageLabel")
+ProfileAvatar.Name = "Avatar"; ProfileAvatar.Parent = ProfileButton
+ProfileAvatar.Position = UDim2.new(0, 8, 0.5, -17); ProfileAvatar.Size = UDim2.fromOffset(34, 34)
+ProfileAvatar.BackgroundTransparency = 1; ProfileAvatar.BorderSizePixel = 0
+ProfileAvatar.Image = "rbxasset://textures/ui/Guidetool/PlayerIcon.png"
+ProfileAvatar.ImageColor3 = Color3.fromRGB(254, 254, 254); ProfileAvatar.ScaleType = Enum.ScaleType.Crop
+ProfileAvatar:SetAttribute("StaticThemeColor", true)
+Corner(ProfileAvatar, 9999); Stroke(ProfileAvatar, T.Bd2, 1, 0.4)
+task.spawn(function()
+	local ok, image = pcall(function()
+		return PS:GetUserThumbnailAsync(plr.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+	end)
+	if ok and type(image) == "string" and image ~= "" and ProfileAvatar.Parent then
+		ProfileAvatar.Image = image
+	end
+end)
 local ProfileTitle = Instance.new("TextLabel")
 ProfileTitle.Parent = ProfileButton; ProfileTitle.BackgroundTransparency = 1
-ProfileTitle.Position = UDim2.fromOffset(11, 7); ProfileTitle.Size = UDim2.new(1, -22, 0, 18)
-ProfileTitle.Font = FB; ProfileTitle.TextSize = 12; ProfileTitle.TextColor3 = T.White
-ProfileTitle.TextXAlignment = Enum.TextXAlignment.Left; ProfileTitle.Text = "DEMONOLOGY"
+ProfileTitle.Position = UDim2.new(0, 49, 0.5, -13); ProfileTitle.Size = UDim2.new(1, -56, 0, 15)
+ProfileTitle.Font = FM; ProfileTitle.TextSize = 12; ProfileTitle.TextColor3 = T.Tx
+ProfileTitle.TextXAlignment = Enum.TextXAlignment.Left; ProfileTitle.TextTruncate = Enum.TextTruncate.AtEnd
+ProfileTitle.Text = plr.DisplayName
 local ProfileSub = Instance.new("TextLabel")
 ProfileSub.Parent = ProfileButton; ProfileSub.BackgroundTransparency = 1
-ProfileSub.Position = UDim2.fromOffset(11, 25); ProfileSub.Size = UDim2.new(1, -22, 0, 16)
+ProfileSub.Position = UDim2.new(0, 49, 0.5, 2); ProfileSub.Size = UDim2.new(1, -56, 0, 11)
 ProfileSub.Font = F; ProfileSub.TextSize = 10; ProfileSub.TextColor3 = T.Tx3
 ProfileSub.TextXAlignment = Enum.TextXAlignment.Left; ProfileSub.TextTruncate = Enum.TextTruncate.AtEnd
 ProfileSub.Text = "@" .. tostring(plr.Name)
@@ -766,6 +817,8 @@ do
 	card.Name = "QuickStatus"; card.Parent = SB; card.LayoutOrder = 100
 	card.Size = UDim2.new(1, 0, 0, 94); card.BackgroundColor3 = T.Card; card.BorderSizePixel = 0
 	Corner(card, 9); Stroke(card, T.Bd2, 1, 0.28)
+	local quickGradient = Grad(card, T.White:Lerp(T.Accent, 0.16), T.White:Lerp(T.Elev, 0.08), 90)
+	quickGradient.Name = "QuickStatusGradient"
 	local headMark = Instance.new("Frame")
 	headMark.Parent = card; headMark.Position = UDim2.fromOffset(9, 7); headMark.Size = UDim2.fromOffset(2, 11)
 	headMark.BackgroundColor3 = T.Accent; headMark.BorderSizePixel = 0; Corner(headMark, 2)
@@ -826,7 +879,7 @@ openAppearance = (function()
 	local panel = Instance.new("Frame")
 	panel.Name = "AppearanceSettings"; panel.Parent = SG
 	panel.AnchorPoint = Vector2.new(0.5, 0.5); panel.Position = UDim2.fromScale(0.5, 0.5)
-	panel.Size = UDim2.fromOffset(320, 402); panel.BackgroundColor3 = T.Card; panel.BorderSizePixel = 0
+	panel.Size = UDim2.fromOffset(320, 456); panel.BackgroundColor3 = T.Card; panel.BorderSizePixel = 0
 	panel.Visible = false; panel.ZIndex = 1500
 	Corner(panel, 12); Stroke(panel, T.Bd2, 1, 0.18)
 	Grad(panel, T.White:Lerp(T.Accent, 0.10), T.White:Lerp(T.Elev, 0.06), 90)
@@ -838,7 +891,7 @@ openAppearance = (function()
 	local subtitle = Instance.new("TextLabel")
 	subtitle.Parent = panel; subtitle.BackgroundTransparency = 1; subtitle.Position = UDim2.fromOffset(16, 34)
 	subtitle.Size = UDim2.new(1, -32, 0, 18); subtitle.Font = F; subtitle.TextSize = 10; subtitle.TextColor3 = T.Tx3
-	subtitle.TextXAlignment = Enum.TextXAlignment.Left; subtitle.Text = "Theme, readability and notification placement"
+	subtitle.TextXAlignment = Enum.TextXAlignment.Left; subtitle.Text = "Theme, HUD scale, readability and notifications"
 	local close = Instance.new("TextButton")
 	close.Parent = panel; close.AnchorPoint = Vector2.new(1, 0); close.Position = UDim2.new(1, -12, 0, 12)
 	close.Size = UDim2.fromOffset(26, 26); close.BackgroundColor3 = T.Elev; close.BorderSizePixel = 0
@@ -872,12 +925,15 @@ openAppearance = (function()
 	makeChoice("TEXT SIZE", { 0.88, 1, 1.18 }, function() return S.UITextScale end, function(value) UIStyle:ApplyTextScale(value) end, 1, function(value)
 		return value == 0.88 and "Small" or (value == 1.18 and "Large" or "Normal")
 	end)
+	makeChoice("HUD SIZE", { 0.8, 0.9, 1, 1.15, 1.3 }, function() return S.HUDScale end, function(value)
+		UIStyle:ApplyHUDScale(value)
+	end, 2, function(value) return tostring(math.floor(value * 100 + 0.5)) .. "%" end)
 	makeChoice("NOTIFICATION POSITION", { "Top Center", "Top Right", "Bottom Right", "Bottom Center", "Bottom Left", "Top Left" }, function()
 		return S.NotificationPosition
-	end, function(value) UIStyle:PlaceNotifications(value) end, 2)
+	end, function(value) UIStyle:PlaceNotifications(value) end, 3)
 
 	local themeCard = Instance.new("Frame")
-	themeCard.Parent = body; themeCard.LayoutOrder = 3; themeCard.Size = UDim2.new(1, 0, 0, 126)
+	themeCard.Parent = body; themeCard.LayoutOrder = 4; themeCard.Size = UDim2.new(1, 0, 0, 150)
 	themeCard.BackgroundColor3 = T.BG; themeCard.BorderSizePixel = 0; Corner(themeCard, 9); Stroke(themeCard, T.Bd2, 1, 0.42)
 	local themeTitle = Instance.new("TextLabel")
 	themeTitle.Parent = themeCard; themeTitle.BackgroundTransparency = 1; themeTitle.Position = UDim2.fromOffset(10, 5)
@@ -888,7 +944,7 @@ openAppearance = (function()
 	local grid = Instance.new("UIGridLayout")
 	grid.Parent = gridHost; grid.CellSize = UDim2.new(0.5, -3, 0, 20); grid.CellPadding = UDim2.fromOffset(6, 4)
 	grid.FillDirectionMaxCells = 2; grid.SortOrder = Enum.SortOrder.LayoutOrder
-	local themeButtons, themeNames = {}, { "Graphite", "Ocean", "Forest", "Wine", "Violet", "Ember", "Amber", "Rose" }
+	local themeButtons, themeNames = {}, { "Default", "Graphite", "Ocean", "Forest", "Wine", "Violet", "Ember", "Amber", "Rose" }
 	local function refreshThemes()
 		for name, button in pairs(themeButtons) do
 			local selected = name == S.UITheme
@@ -916,7 +972,7 @@ openAppearance = (function()
 		for _, refresh in ipairs(choiceRefreshers) do refresh() end
 	end
 	local executor = Instance.new("TextLabel")
-	executor.Parent = body; executor.LayoutOrder = 4; executor.Size = UDim2.new(1, 0, 0, 28)
+	executor.Parent = body; executor.LayoutOrder = 5; executor.Size = UDim2.new(1, 0, 0, 28)
 	executor.BackgroundColor3 = T.BG; executor.BorderSizePixel = 0; executor.Font = F; executor.TextSize = 10; executor.TextColor3 = T.Tx2
 	executor.TextXAlignment = Enum.TextXAlignment.Left
 	local executorName = "Unknown executor"; pcall(function() if identifyexecutor then executorName = tostring(identifyexecutor()) end end)
@@ -939,6 +995,7 @@ openAppearance = (function()
 
 	table.insert(ConfigControls, { id = "UI/Theme", get = function() return S.UITheme end, set = function(value) UIStyle:ApplyTheme(value) end })
 	table.insert(ConfigControls, { id = "UI/TextScale", get = function() return S.UITextScale end, set = function(value) UIStyle:ApplyTextScale(value) end })
+	table.insert(ConfigControls, { id = "UI/HUDScale", get = function() return S.HUDScale end, set = function(value) UIStyle:ApplyHUDScale(value) end })
 	table.insert(ConfigControls, { id = "UI/NotificationPosition", get = function() return S.NotificationPosition end, set = function(value) UIStyle:PlaceNotifications(value) end })
 	return function() setOpen(not opened) end
 end)()
@@ -1527,42 +1584,56 @@ local function mkDragHUD(name, pos, size, z)
 	local f = Instance.new("Frame")
 	f.Name = "HUD_" .. name
 	f.Parent = SG
+	f:SetAttribute("ScalableHUD", true)
 	f.Active = true
 	f.Position = pos
 	f.Size = size
 	f.BackgroundColor3 = T.Card
-	f.BackgroundTransparency = 0.05
+	f.BackgroundTransparency = 0.01
 	f.BorderSizePixel = 0
 	f.Visible = false
 	f.ZIndex = z or 850
-	Corner(f, 12)
-	Stroke(f, T.Bd2, 1, 0.35)
-	Shadow(f, 0.45)
-	Grad(f, T.White:Lerp(T.Accent, 0.12), T.White:Lerp(T.Elev, 0.08), 90)
+	Corner(f, 11)
+	Stroke(f, T.Bd2, 1, 0.22)
+	Shadow(f, 0.76)
+	local surfaceGradient = Grad(f, T.White:Lerp(T.Accent, 0.12), T.White:Lerp(T.Elev, 0.08), 90)
+	surfaceGradient.Name = "HUDSurfaceGradient"
+	local userScale = Instance.new("UIScale")
+	userScale.Name = "HUDUserScale"; userScale.Scale = S.HUDScale; userScale.Parent = f
 	local tb = Instance.new("Frame")
+	tb.Name = "tb"
 	tb.Parent = f
 	tb.Active = true
 	tb.BackgroundColor3 = T.Elev
+	tb.BackgroundTransparency = 0.025
 	tb.BorderSizePixel = 0
-	tb.Size = UDim2.new(1, 0, 0, 30)
+	tb.Size = UDim2.new(1, 0, 0, 28)
 	tb.ZIndex = z + 1
 	Corner(tb, 10)
+	local headerGradient = Grad(tb, T.White:Lerp(T.Accent, 0.14), T.White:Lerp(T.Card, 0.06), 0)
+	headerGradient.Name = "HUDHeaderGradient"
+	local tbLine = Instance.new("Frame")
+	tbLine.Parent = tb; tbLine.AnchorPoint = Vector2.new(0, 1); tbLine.Position = UDim2.new(0, 0, 1, 0)
+	tbLine.Size = UDim2.new(1, 0, 0, 1); tbLine.BackgroundColor3 = T.Bd; tbLine.BackgroundTransparency = 0.2
+	tbLine.BorderSizePixel = 0; tbLine.ZIndex = z + 1
 	local tick = Instance.new("Frame")
+	tick.Name = "tick"
 	tick.Parent = tb
 	tick.BackgroundColor3 = T.Accent
 	tick.BorderSizePixel = 0
-	tick.Position = UDim2.new(0, 10, 0.5, -6)
-	tick.Size = UDim2.new(0, 3, 0, 12)
+	tick.Position = UDim2.new(0, 8, 0.5, -6)
+	tick.Size = UDim2.new(0, 2, 0, 12)
 	tick.ZIndex = z + 2
 	Corner(tick, 2)
 	local tl = Instance.new("TextLabel")
+	tl.Name = "tl"
 	tl.Parent = tb
 	tl.BackgroundTransparency = 1
-	tl.Size = UDim2.new(1, -20, 1, 0)
-	tl.Position = UDim2.new(0, 18, 0, 0)
+	tl.Size = UDim2.new(1, -18, 1, 0)
+	tl.Position = UDim2.new(0, 16, 0, 0)
 	tl.Font = FB
 	tl.TextSize = 13
-	tl.TextColor3 = T.Tx3
+	tl.TextColor3 = T.Tx
 	tl.TextXAlignment = Enum.TextXAlignment.Left
 	tl.Text = string.upper(name)
 	tl.ZIndex = z + 2
@@ -1570,8 +1641,8 @@ local function mkDragHUD(name, pos, size, z)
 	ct.Name = "C"
 	ct.Parent = f
 	ct.BackgroundTransparency = 1
-	ct.Position = UDim2.new(0, 9, 0, 34)
-	ct.Size = UDim2.new(1, -18, 1, -41)
+	ct.Position = UDim2.new(0, 10, 0, 33)
+	ct.Size = UDim2.new(1, -20, 1, -40)
 	ct.ZIndex = z + 1
 	
 	makeElementDraggable(f, tb)

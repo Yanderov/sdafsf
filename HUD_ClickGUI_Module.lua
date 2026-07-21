@@ -9,6 +9,13 @@ local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 
 local THEMES = {
+    Default = {
+        BG=Color3.fromRGB(3,3,3), Sidebar=Color3.fromRGB(4,4,4), Card=Color3.fromRGB(8,8,8), Elev=Color3.fromRGB(13,13,13),
+        Hover=Color3.fromRGB(19,19,19), ActiveBg=Color3.fromRGB(26,26,26), Bd=Color3.fromRGB(20,20,20), Bd2=Color3.fromRGB(40,40,40),
+        White=Color3.fromRGB(255,255,255), Tx=Color3.fromRGB(238,238,236), Tx2=Color3.fromRGB(214,213,210), Tx3=Color3.fromRGB(180,179,175), Tx4=Color3.fromRGB(154,153,149),
+        Accent=Color3.fromRGB(216,215,211), Glow=Color3.fromRGB(145,144,141), TgOff=Color3.fromRGB(29,29,29), TgOn=Color3.fromRGB(176,176,174),
+        KnobOff=Color3.fromRGB(137,136,133), KnobOn=Color3.fromRGB(250,249,246), AccentSoft=Color3.fromRGB(72,72,71),
+    },
     Graphite = {
         BG=Color3.fromRGB(32,32,32), Sidebar=Color3.fromRGB(38,38,38), Card=Color3.fromRGB(44,44,44), Elev=Color3.fromRGB(52,52,52),
         Hover=Color3.fromRGB(62,62,62), ActiveBg=Color3.fromRGB(74,74,74), Bd=Color3.fromRGB(58,58,58), Bd2=Color3.fromRGB(80,80,80),
@@ -61,22 +68,22 @@ local THEMES = {
 
 local LOCALES = {
     ENG = {
-        Settings="Settings", Language="Language", TextSize="Text Size", NotificationPosition="Notification Position",
+        Settings="Settings", Language="Language", TextSize="Text Size", HUDSize="HUD Size", NotificationPosition="Notification Position",
         NotificationColor="Notification Color", ThemeStyle="Theme Style", Executor="Executor", RoundRoles="ROUND ROLES",
     },
     RU = {
         Visuals="Визуалы", Combat="Бой", Motion="Движение", Player="Игрок", Misc="Разное", Teleport="Телепорт", Servers="Сервера", Config="Конфиг",
-        Settings="Настройки", Close="Закрыть", Search="Поиск", NothingFound="Ничего не найдено", Language="Язык", TextSize="Размер текста",
+        Settings="Настройки", Close="Закрыть", Search="Поиск", NothingFound="Ничего не найдено", Language="Язык", TextSize="Размер текста", HUDSize="Размер HUD",
         NotificationPosition="Позиция уведомлений", NotificationColor="Цвет уведомлений", ThemeStyle="Тема", Executor="Экзекутор", RoundRoles="РОЛИ РАУНДА",
     },
     UK = {
         Visuals="Візуали", Combat="Бій", Motion="Рух", Player="Гравець", Misc="Різне", Teleport="Телепорт", Servers="Сервери", Config="Конфіг",
-        Settings="Налаштування", Close="Закрити", Search="Пошук", NothingFound="Нічого не знайдено", Language="Мова", TextSize="Розмір тексту",
+        Settings="Налаштування", Close="Закрити", Search="Пошук", NothingFound="Нічого не знайдено", Language="Мова", TextSize="Розмір тексту", HUDSize="Розмір HUD",
         NotificationPosition="Позиція сповіщень", NotificationColor="Колір сповіщень", ThemeStyle="Тема", Executor="Екзекутор", RoundRoles="РОЛІ РАУНДУ",
     },
     SPANISH = {
         Visuals="Visuales", Combat="Combate", Motion="Movimiento", Player="Jugador", Misc="Varios", Teleport="Teletransporte", Servers="Servidores", Config="Config",
-        Settings="Ajustes", Close="Cerrar", Search="Buscar", NothingFound="Nada encontrado", Language="Idioma", TextSize="Tamaño del texto",
+        Settings="Ajustes", Close="Cerrar", Search="Buscar", NothingFound="Nada encontrado", Language="Idioma", TextSize="Tamaño del texto", HUDSize="Tamaño del HUD",
         NotificationPosition="Posición de avisos", NotificationColor="Color de avisos", ThemeStyle="Tema", Executor="Ejecutor", RoundRoles="ROLES DE RONDA",
     },
 }
@@ -198,6 +205,26 @@ local function stroke(instance, color, transparency)
     return s
 end
 
+local function gradient(instance, name, first, second, rotation)
+    local g = Instance.new("UIGradient")
+    g.Name = name or "UIGradient"
+    g.Color = ColorSequence.new(first, second)
+    g.Rotation = rotation or 90
+    g.Parent = instance
+    return g
+end
+
+local function shadow(instance, color, transparency)
+    local s = Instance.new("UIStroke")
+    s.Color = color
+    s.Thickness = 2
+    s.Transparency = transparency or 0.76
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    s.LineJoinMode = Enum.LineJoinMode.Round
+    s.Parent = instance
+    return s
+end
+
 local function pad(instance, left, right, top, bottom)
     local p = Instance.new("UIPadding")
     p.PaddingLeft = UDim.new(0, left or 0)
@@ -227,9 +254,10 @@ function HUD.new(options)
     assert(parent, "HUD_ClickGUI_Module: PlayerGui is not available")
 
     local palette = {}
-    local themeName = options.Theme or "Graphite"
+    local themeName = options.Theme or "Default"
     local language = options.Language or "ENG"
     local textScale = options.TextScale or 1
+    local hudScale = math.clamp(tonumber(options.HUDScale) or 1, 0.8, 1.3)
     local notificationPosition = options.NotificationPosition or "Bottom Right"
     local notificationColor = NOTIFICATION_COLORS[options.NotificationColor] ~= nil and options.NotificationColor or "Theme"
     local controls = {}
@@ -315,18 +343,19 @@ function HUD.new(options)
 
 
     local function makePalette(name)
-        local source = THEMES[name] or THEMES.Graphite
-        themeName = THEMES[name] and name or "Graphite"
+        local source = THEMES[name] or THEMES.Default
+        themeName = THEMES[name] and name or "Default"
         for key, value in pairs(source) do palette[key] = value end
         palette.White = source.White or Color3.fromRGB(255,255,255)
         palette.Tx = source.Tx or palette.White:Lerp(palette.Card, 0.08)
         palette.Tx2 = source.Tx2 or palette.White:Lerp(palette.Card, 0.24)
         palette.Tx3 = source.Tx3 or palette.White:Lerp(palette.Card, 0.43)
         palette.Tx4 = source.Tx4 or palette.White:Lerp(palette.Card, 0.58)
-        palette.TgOff = palette.Bd2:Lerp(palette.Card, 0.35)
-        palette.TgOn = palette.Accent
-        palette.KnobOff = palette.Tx2
-        palette.KnobOn = palette.White
+        palette.TgOff = source.TgOff or palette.Bd2:Lerp(palette.Card, 0.35)
+        palette.TgOn = source.TgOn or palette.Accent
+        palette.KnobOff = source.KnobOff or palette.Tx2
+        palette.KnobOn = source.KnobOn or palette.White
+        palette.AccentSoft = source.AccentSoft or palette.Accent:Lerp(palette.Card, 0.68)
     end
 
     root = Instance.new("ScreenGui")
@@ -337,6 +366,17 @@ function HUD.new(options)
     root.Parent = parent
 
     makePalette(themeName)
+
+    local function applyHUDScaleToFrame(frame)
+        if not frame or not frame:IsA("GuiObject") or frame.Parent ~= root then return end
+        local scaler = frame:FindFirstChild("HUDUserScale")
+        if not scaler then
+            scaler = Instance.new("UIScale")
+            scaler.Name = "HUDUserScale"
+            scaler.Parent = frame
+        end
+        scaler.Scale = hudScale
+    end
 
     local main = Instance.new("Frame")
     main.Name = "Main"
@@ -374,8 +414,34 @@ function HUD.new(options)
     profile.BorderSizePixel = 0
     profile.Active = true
     corner(profile, 10)
-    stroke(profile, palette.Bd2, 0.32)
+    local profileStroke = stroke(profile, palette.Bd2, 0.35)
+    local profileShadow = shadow(profile, palette.Bd2, 0.45)
+    setRole(profileStroke, "Color", "Bd2")
+    setRole(profileShadow, "Color", "Bd2")
     setRole(profile, "BackgroundColor3", "Card")
+
+    local avatar = Instance.new("ImageLabel")
+    avatar.Name = "Avatar"
+    avatar.Parent = profile
+    avatar.Position = UDim2.new(0, 8, 0.5, -17)
+    avatar.Size = UDim2.fromOffset(34, 34)
+    avatar.BackgroundTransparency = 1
+    avatar.BorderSizePixel = 0
+    avatar.Image = options.AvatarImage or "rbxasset://textures/ui/Guidetool/PlayerIcon.png"
+    avatar.ImageColor3 = Color3.fromRGB(254, 254, 254)
+    avatar.ScaleType = Enum.ScaleType.Crop
+    avatar.ZIndex = 3
+    corner(avatar, 9999)
+    local avatarStroke = stroke(avatar, palette.Bd2, 0.4)
+    setRole(avatarStroke, "Color", "Bd2")
+    if not options.AvatarImage and player then
+        task.spawn(function()
+            local ok, image = pcall(function()
+                return Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+            end)
+            if ok and type(image) == "string" and image ~= "" and avatar.Parent then avatar.Image = image end
+        end)
+    end
 
     local sidebar = Instance.new("Frame")
     sidebar.Name = "Sidebar"
@@ -392,15 +458,17 @@ function HUD.new(options)
     sideLayout.SortOrder = Enum.SortOrder.LayoutOrder
     sideLayout.Padding = UDim.new(0, 3)
 
-    local title = newText(profile, options.Title or "INERTIA", 13, palette.White, Enum.Font.GothamBold)
-    title.Position = UDim2.fromOffset(12, 8)
-    title.Size = UDim2.new(1, -24, 0, 18)
+    local title = newText(profile, options.Title or (player and player.DisplayName) or "INERTIA", 13, palette.White, Enum.Font.GothamBold)
+    title.Position = UDim2.new(0, 49, 0.5, -13)
+    title.Size = UDim2.new(1, -56, 0, 15)
     title.LayoutOrder = 1
+    title.TextTruncate = Enum.TextTruncate.AtEnd
     setRole(title, "TextColor3", "White")
-    local subtitle = newText(profile, options.Subtitle or "UI ONLY MODULE", 9, palette.Tx3, Enum.Font.GothamMedium)
-    subtitle.Position = UDim2.fromOffset(12, 28)
-    subtitle.Size = UDim2.new(1, -24, 0, 16)
+    local subtitle = newText(profile, options.Subtitle or (player and ("@" .. player.Name)) or "UI ONLY MODULE", 9, palette.Tx3, Enum.Font.GothamMedium)
+    subtitle.Position = UDim2.new(0, 49, 0.5, 2)
+    subtitle.Size = UDim2.new(1, -56, 0, 11)
     subtitle.LayoutOrder = 2
+    subtitle.TextTruncate = Enum.TextTruncate.AtEnd
     setRole(subtitle, "TextColor3", "Tx3")
 
     local search = Instance.new("TextBox")
@@ -517,7 +585,7 @@ function HUD.new(options)
     settingsModal.Parent = root
     settingsModal.AnchorPoint = Vector2.new(0.5, 0.5)
     settingsModal.Position = options.SettingsPosition or UDim2.new(0.5, 620, 0.5, 0)
-    settingsModal.Size = UDim2.fromOffset(300, 458)
+    settingsModal.Size = UDim2.fromOffset(300, 530)
     settingsModal.BackgroundColor3 = palette.Card
     settingsModal.BorderSizePixel = 0
     settingsModal.Visible = false
@@ -614,12 +682,17 @@ function HUD.new(options)
     end, {"Small", "Medium", "Large"}, function(value)
         api:SetTextScale(value == "Small" and 0.88 or (value == "Large" and 1.18 or 1))
     end)
-    makeSettingsChoice("NotificationPosition", "Notification Position", 3, function() return notificationPosition end, {
+    makeSettingsChoice("HUDSize", "HUD Size", 3, function()
+        return tostring(math.floor(hudScale * 100 + 0.5)) .. "%"
+    end, {"80%", "90%", "100%", "115%", "130%"}, function(value)
+        api:SetHUDScale((tonumber(string.match(value, "%d+")) or 100) / 100)
+    end)
+    makeSettingsChoice("NotificationPosition", "Notification Position", 4, function() return notificationPosition end, {
         "Bottom Right", "Bottom Center", "Bottom Left", "Top Left", "Top Center", "Top Right",
     }, function(value)
         api:SetNotificationPosition(value)
     end)
-    makeSettingsChoice("NotificationColor", "Notification Color", 4, function() return notificationColor end, {
+    makeSettingsChoice("NotificationColor", "Notification Color", 5, function() return notificationColor end, {
         "Theme", "White", "Green", "Yellow", "Red", "Pink",
     }, function(value)
         api:SetNotificationColor(value)
@@ -628,8 +701,8 @@ function HUD.new(options)
     local themeHolder = Instance.new("Frame")
     themeHolder.Name = "ThemeStyle"
     themeHolder.Parent = settingsBody
-    themeHolder.LayoutOrder = 5
-    themeHolder.Size = UDim2.new(1, 0, 0, 118)
+    themeHolder.LayoutOrder = 6
+    themeHolder.Size = UDim2.new(1, 0, 0, 144)
     themeHolder.BackgroundTransparency = 1
     local themeTitle = newText(themeHolder, "Theme Style", 11, palette.Tx3, Enum.Font.GothamMedium)
     themeTitle.Size = UDim2.new(1, 0, 0, 17)
@@ -639,7 +712,7 @@ function HUD.new(options)
     local themeGrid = Instance.new("Frame")
     themeGrid.Parent = themeHolder
     themeGrid.Position = UDim2.fromOffset(0, 20)
-    themeGrid.Size = UDim2.new(1, 0, 0, 96)
+    themeGrid.Size = UDim2.new(1, 0, 0, 122)
     themeGrid.BackgroundTransparency = 1
     local grid = Instance.new("UIGridLayout")
     grid.Parent = themeGrid
@@ -648,7 +721,7 @@ function HUD.new(options)
     grid.FillDirectionMaxCells = 2
     grid.SortOrder = Enum.SortOrder.LayoutOrder
     local themeButtons = {}
-    for index, name in ipairs({"Graphite", "Ocean", "Forest", "Wine", "Violet", "Ember", "Amber", "Rose"}) do
+    for index, name in ipairs({"Default", "Graphite", "Ocean", "Forest", "Wine", "Violet", "Ember", "Amber", "Rose"}) do
         local button = Instance.new("TextButton")
         button.Name = name
         button.Parent = themeGrid
@@ -672,7 +745,7 @@ function HUD.new(options)
     local executorHolder = Instance.new("Frame")
     executorHolder.Name = "Executor"
     executorHolder.Parent = settingsBody
-    executorHolder.LayoutOrder = 6
+    executorHolder.LayoutOrder = 7
     executorHolder.Size = UDim2.new(1, 0, 0, 48)
     executorHolder.BackgroundTransparency = 1
     local executorTitle = newText(executorHolder, "Executor", 11, palette.Tx3, Enum.Font.GothamMedium)
@@ -708,8 +781,16 @@ function HUD.new(options)
             if obj == body then obj.BackgroundColor3 = palette.BG end
             if obj == sidebar then obj.BackgroundColor3 = palette.Sidebar end
             if obj == header then obj.BackgroundColor3 = palette.Card end
-            if obj:IsA("UIGradient") and obj.Name == "NotificationGradient" then
-                obj.Color = ColorSequence.new(palette.White:Lerp(palette.Accent, 0.12), palette.White:Lerp(palette.Elev, 0.08))
+            if obj:IsA("UIGradient") then
+                if obj.Name == "HUDHeaderGradient" then
+                    obj.Color = ColorSequence.new(palette.White:Lerp(palette.Accent, 0.14), palette.White:Lerp(palette.Card, 0.06))
+                elseif obj.Name == "QuickStatusGradient" then
+                    obj.Color = ColorSequence.new(palette.White:Lerp(palette.Accent, 0.16), palette.White:Lerp(palette.Elev, 0.08))
+                elseif obj.Name == "DynamicIslandGradient" then
+                    obj.Color = ColorSequence.new(palette.White:Lerp(palette.Accent, 0.14), palette.White:Lerp(palette.Card, 0.08))
+                elseif obj.Name == "HUDSurfaceGradient" or obj.Name == "NotificationGradient" then
+                    obj.Color = ColorSequence.new(palette.White:Lerp(palette.Accent, 0.12), palette.White:Lerp(palette.Elev, 0.08))
+                end
             end
         end
         recolor(root)
@@ -762,6 +843,16 @@ function HUD.new(options)
         for _, refresh in ipairs(settingsValues) do pcall(refresh) end
         if options.OnTextScaleChanged then pcall(options.OnTextScaleChanged, textScale) end
         emitSetting("TextScale", textScale)
+    end
+
+    function api:SetHUDScale(scale)
+        hudScale = math.clamp(tonumber(scale) or 1, 0.8, 1.3)
+        for _, hud in pairs(huds) do
+            if type(hud) == "table" and hud.Frame then applyHUDScaleToFrame(hud.Frame) end
+        end
+        for _, refresh in ipairs(settingsValues) do pcall(refresh) end
+        if options.OnHUDScaleChanged then pcall(options.OnHUDScaleChanged, hudScale) end
+        emitSetting("HUDScale", hudScale)
     end
 
     showPage = function(page)
@@ -1132,27 +1223,55 @@ function HUD.new(options)
         frame.Position = hudOptions.Position or UDim2.fromOffset(20, 120)
         frame.Size = hudOptions.Size or UDim2.fromOffset(250, 74)
         frame.BackgroundColor3 = palette.Card
+        frame.BackgroundTransparency = 0.01
         frame.BorderSizePixel = 0
         frame.ZIndex = hudOptions.ZIndex or 800
-        corner(frame, 10)
+        corner(frame, 11)
         setRole(frame, "BackgroundColor3", "Card")
-        stroke(frame, palette.Bd2, 0.3)
+        local frameStroke = stroke(frame, palette.Bd2, 0.22)
+        setRole(frameStroke, "Color", "Bd2")
+        local frameShadow = shadow(frame, palette.Bd2, 0.76)
+        setRole(frameShadow, "Color", "Bd2")
+        gradient(frame, "HUDSurfaceGradient", palette.White:Lerp(palette.Accent, 0.12), palette.White:Lerp(palette.Elev, 0.08), 90)
         local top = Instance.new("Frame")
+        top.Name = "tb"
         top.Parent = frame
-        top.Size = UDim2.new(1, 0, 0, 26)
+        top.Size = UDim2.new(1, 0, 0, 28)
         top.BackgroundColor3 = palette.Elev
+        top.BackgroundTransparency = 0.025
         top.BorderSizePixel = 0
         top.ZIndex = frame.ZIndex + 1
-        corner(top, 8)
+        corner(top, 10)
         setRole(top, "BackgroundColor3", "Elev")
+        gradient(top, "HUDHeaderGradient", palette.White:Lerp(palette.Accent, 0.14), palette.White:Lerp(palette.Card, 0.06), 0)
+        local topLine = Instance.new("Frame")
+        topLine.Parent = top
+        topLine.AnchorPoint = Vector2.new(0, 1)
+        topLine.Position = UDim2.new(0, 0, 1, 0)
+        topLine.Size = UDim2.new(1, 0, 0, 1)
+        topLine.BackgroundColor3 = palette.Bd
+        topLine.BackgroundTransparency = 0.2
+        topLine.BorderSizePixel = 0
+        topLine.ZIndex = frame.ZIndex + 1
+        setRole(topLine, "BackgroundColor3", "Bd")
+        local tick = Instance.new("Frame")
+        tick.Parent = top
+        tick.Position = UDim2.new(0, 8, 0.5, -6)
+        tick.Size = UDim2.fromOffset(2, 12)
+        tick.BackgroundColor3 = palette.Accent
+        tick.BorderSizePixel = 0
+        tick.ZIndex = frame.ZIndex + 2
+        corner(tick, 2)
+        setRole(tick, "BackgroundColor3", "Accent")
         local heading = newText(top, "", 11, palette.Tx3, Enum.Font.GothamBold)
-        heading.Position = UDim2.new(0, 12, 0, 0)
-        heading.Size = UDim2.new(1, -24, 1, 0)
+        heading.Position = UDim2.new(0, 16, 0, 0)
+        heading.Size = UDim2.new(1, -18, 1, 0)
         heading.ZIndex = frame.ZIndex + 2
+        setRole(heading, "TextColor3", "Tx")
         registerText(heading, name, true)
         local content = newText(frame, hudOptions.Text or "", 13, palette.Tx, Enum.Font.GothamMedium)
-        content.Position = UDim2.new(0, 12, 0, 32)
-        content.Size = UDim2.new(1, -24, 1, -38)
+        content.Position = UDim2.new(0, 10, 0, 33)
+        content.Size = UDim2.new(1, -20, 1, -40)
         content.TextWrapped = true
         content.ZIndex = frame.ZIndex + 2
         local dragHandle = hudOptions.DragHandle == false and frame or top
@@ -1174,6 +1293,7 @@ function HUD.new(options)
         end)
         local hud = { Frame=frame, Content=content, SetVisible=function(_, visible) frame.Visible = visible == true end, SetText=function(_, value) content.Text = tostring(value or "") end }
         huds[name] = hud
+        applyHUDScaleToFrame(frame)
         return hud
     end
 
@@ -1200,6 +1320,7 @@ function HUD.new(options)
         local frameStroke = stroke(frame, palette.Bd2, 0.32)
         setRole(frame, "BackgroundColor3", "Card")
         setRole(frameStroke, "Color", "Bd2")
+        gradient(frame, "QuickStatusGradient", palette.White:Lerp(palette.Accent, 0.16), palette.White:Lerp(palette.Elev, 0.08), 90)
 
         local header = Instance.new("Frame")
         header.Name = "QuickHeader"
@@ -1303,6 +1424,7 @@ function HUD.new(options)
         local frameStroke = stroke(frame, palette.Bd2, 0.18)
         setRole(frame, "BackgroundColor3", "Sidebar")
         setRole(frameStroke, "Color", "Bd2")
+        gradient(frame, "DynamicIslandGradient", palette.White:Lerp(palette.Accent, 0.14), palette.White:Lerp(palette.Card, 0.08), 90)
         local dot = Instance.new("Frame")
         dot.Parent = frame
         dot.AnchorPoint = Vector2.new(0, 0.5)
@@ -1353,6 +1475,7 @@ function HUD.new(options)
             end,
         }
         huds.DynamicIsland = hud
+        applyHUDScaleToFrame(frame)
         return hud
     end
 
@@ -1849,9 +1972,14 @@ function HUD.new(options)
         main.Visible = visible == true
     end
 
-    function api:SetProfile(profileTitle, profileSubtitle)
+    function api:SetProfile(profileTitle, profileSubtitle, profileAvatar)
         title.Text = tostring(profileTitle or "INERTIA")
         subtitle.Text = tostring(profileSubtitle or "UI ONLY MODULE")
+        if profileAvatar ~= nil then avatar.Image = tostring(profileAvatar) end
+    end
+
+    function api:SetAvatar(value)
+        if value ~= nil then avatar.Image = tostring(value) end
     end
 
     function api:SetExecutor(value)
@@ -1867,6 +1995,7 @@ function HUD.new(options)
         if values.Theme then api:SetTheme(values.Theme) end
         if values.Language then api:SetLanguage(values.Language) end
         if values.TextScale then api:SetTextScale(values.TextScale) end
+        if values.HUDScale then api:SetHUDScale(values.HUDScale) end
         if values.NotificationPosition then api:SetNotificationPosition(values.NotificationPosition) end
         if values.NotificationColor then api:SetNotificationColor(values.NotificationColor) end
         return true
@@ -1905,6 +2034,7 @@ function HUD.new(options)
             Theme=themeName,
             Language=language,
             TextScale=textScale,
+            HUDScale=hudScale,
             NotificationPosition=notificationPosition,
             NotificationColor=notificationColor,
         }

@@ -97,7 +97,7 @@ local function cam() return Workspace.CurrentCamera end
 --------------------------------------------------------------------------------
 local S = {
 	Connections = {}, Gui = nil, Destroyed = false,
-	UITheme = "Graphite", UITextScale = 1, NotificationPosition = "Top Right",
+	UITheme = "Default", UITextScale = 1, HUDScale = 1, NotificationPosition = "Top Right",
 	-- Motion
 	SpeedEnabled = false, CustomWalkSpeed = 24, CrouchSpeed = 10, SprintMod = 45,
 	JumpEnabled = false, CustomJumpPower = 50,
@@ -500,6 +500,13 @@ local SFX = {
 -- warnings and world highlights) stay independent from these interface roles.
 --------------------------------------------------------------------------------
 local THEMES = {
+	Default = {
+		BG=Color3.fromRGB(3,3,3), Sidebar=Color3.fromRGB(4,4,4), Card=Color3.fromRGB(8,8,8), Elev=Color3.fromRGB(13,13,13),
+		Hover=Color3.fromRGB(19,19,19), ActiveBg=Color3.fromRGB(26,26,26), Bd=Color3.fromRGB(20,20,20), Bd2=Color3.fromRGB(40,40,40),
+		White=Color3.fromRGB(255,255,255), Tx=Color3.fromRGB(238,238,236), Tx2=Color3.fromRGB(214,213,210), Tx3=Color3.fromRGB(180,179,175), Tx4=Color3.fromRGB(154,153,149),
+		Accent=Color3.fromRGB(216,215,211), Glow=Color3.fromRGB(145,144,141), TgOff=Color3.fromRGB(29,29,29), TgOn=Color3.fromRGB(176,176,174),
+		KnobOff=Color3.fromRGB(137,136,133), KnobOn=Color3.fromRGB(250,249,246), AccentSoft=Color3.fromRGB(72,72,71),
+	},
 	Graphite = {
 		BG=Color3.fromRGB(32,32,32), Sidebar=Color3.fromRGB(38,38,38), Card=Color3.fromRGB(44,44,44), Elev=Color3.fromRGB(52,52,52),
 		Hover=Color3.fromRGB(62,62,62), ActiveBg=Color3.fromRGB(74,74,74), Bd=Color3.fromRGB(58,58,58), Bd2=Color3.fromRGB(80,80,80),
@@ -551,14 +558,15 @@ local THEMES = {
 }
 local T = {}
 local function loadPalette(name)
-	local source = THEMES[name] or THEMES.Graphite
+	local source = THEMES[name] or THEMES.Default
 	for key in pairs(T) do T[key] = nil end
 	for key, value in pairs(source) do T[key] = value end
-	T.TgOff = T.Bd2:Lerp(T.Card, 0.35)
-	T.TgOn = T.Accent
-	T.KnobOff = T.Tx2
-	T.KnobOn = T.White
-	return THEMES[name] and name or "Graphite"
+	T.TgOff = source.TgOff or T.Bd2:Lerp(T.Card, 0.35)
+	T.TgOn = source.TgOn or T.Accent
+	T.KnobOff = source.KnobOff or T.Tx2
+	T.KnobOn = source.KnobOn or T.White
+	T.AccentSoft = source.AccentSoft or T.Accent:Lerp(T.Card, 0.68)
+	return THEMES[name] and name or "Default"
 end
 S.UITheme = loadPalette(S.UITheme)
 local TONE = {
@@ -705,7 +713,8 @@ SG.Name = "PressureHub"
 SG.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 SG.ResetOnSpawn = false
 SG.DisplayOrder = 1000
-SG.IgnoreGuiInset = true
+SG.IgnoreGuiInset = false
+pcall(function() SG.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets end)
 
 local uiP
 if gethui then pcall(function() uiP = gethui() end) end
@@ -761,16 +770,22 @@ function UIStyle:ApplyTheme(name)
 				if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
 					self:ReplaceColor(object, "TextColor3", oldPalette, self.TextRoles)
 					if object:IsA("TextBox") then self:ReplaceColor(object, "PlaceholderColor3", oldPalette, self.TextRoles) end
-				elseif object:IsA("ImageLabel") or object:IsA("ImageButton") then
+				elseif (object:IsA("ImageLabel") or object:IsA("ImageButton")) and not object:GetAttribute("StaticThemeColor") then
 					self:ReplaceColor(object, "ImageColor3", oldPalette, self.TextRoles)
 				elseif object:IsA("ScrollingFrame") then
 					self:ReplaceColor(object, "ScrollBarImageColor3", oldPalette, self.TextRoles)
 				elseif object:IsA("UIStroke") then
 					self:ReplaceColor(object, "Color", oldPalette, self.StrokeRoles)
 				elseif object:IsA("UIGradient") and object.Parent and object.Parent:IsA("GuiObject") then
-					-- UIGradient multiplies the parent's color. Near-white masks preserve
-					-- the selected palette instead of crushing cards to black.
-					object.Color = ColorSequence.new(T.White:Lerp(T.Accent, 0.12), T.White:Lerp(T.Elev, 0.08))
+					if object.Name == "HUDHeaderGradient" then
+						object.Color = ColorSequence.new(T.White:Lerp(T.Accent, 0.14), T.White:Lerp(T.Card, 0.06))
+					elseif object.Name == "QuickStatusGradient" then
+						object.Color = ColorSequence.new(T.White:Lerp(T.Accent, 0.16), T.White:Lerp(T.Elev, 0.08))
+					elseif object.Name == "DynamicIslandGradient" then
+						object.Color = ColorSequence.new(T.White:Lerp(T.Accent, 0.14), T.White:Lerp(T.Card, 0.08))
+					else
+						object.Color = ColorSequence.new(T.White:Lerp(T.Accent, 0.12), T.White:Lerp(T.Elev, 0.08))
+					end
 				end
 			end
 		end
@@ -796,6 +811,27 @@ function UIStyle:ApplyTextScale(scale)
 			end
 		end
 	end
+	if S._refreshAppearance then pcall(S._refreshAppearance) end
+end
+
+function UIStyle:ApplyHUDScale(scale)
+	S.HUDScale = math.clamp(tonumber(scale) or 1, 0.8, 1.3)
+	for _, themeRoot in ipairs(self.Roots) do
+		if themeRoot and themeRoot.Parent then
+			for _, object in ipairs(themeRoot:GetDescendants()) do
+				if object:IsA("GuiObject") and object:GetAttribute("ScalableHUD") == true then
+					local scaler = object:FindFirstChild("HUDUserScale")
+					if not scaler then
+						scaler = Instance.new("UIScale")
+						scaler.Name = "HUDUserScale"
+						scaler.Parent = object
+					end
+					scaler.Scale = S.HUDScale
+				end
+			end
+		end
+	end
+	if S._refreshKeybindHUD then pcall(S._refreshKeybindHUD) end
 	if S._refreshAppearance then pcall(S._refreshAppearance) end
 end
 
@@ -1194,21 +1230,44 @@ local ProfileButton = Instance.new("TextButton")
 ProfileButton.Name = "Profile"
 ProfileButton.Parent = Sidebar
 ProfileButton.LayoutOrder = -100
-ProfileButton.Size = UDim2.new(1, 0, 0, 50)
+ProfileButton.Size = UDim2.new(1, 0, 0, 54)
 ProfileButton.BackgroundColor3 = T.Card
 ProfileButton.BorderSizePixel = 0
 ProfileButton.AutoButtonColor = false
 ProfileButton.Text = ""
-Corner(ProfileButton, 9)
-Stroke(ProfileButton, T.Bd2, 1, 0.34)
+Corner(ProfileButton, 10)
+Stroke(ProfileButton, T.Bd2, 1, 0.35)
+Shadow(ProfileButton, 0.45)
+local ProfileAvatar = Instance.new("ImageLabel")
+ProfileAvatar.Name = "Avatar"
+ProfileAvatar.Parent = ProfileButton
+ProfileAvatar.Position = UDim2.new(0, 8, 0.5, -17)
+ProfileAvatar.Size = UDim2.fromOffset(34, 34)
+ProfileAvatar.BackgroundTransparency = 1
+ProfileAvatar.BorderSizePixel = 0
+ProfileAvatar.Image = "rbxasset://textures/ui/Guidetool/PlayerIcon.png"
+ProfileAvatar.ImageColor3 = Color3.fromRGB(254, 254, 254)
+ProfileAvatar.ScaleType = Enum.ScaleType.Crop
+ProfileAvatar:SetAttribute("StaticThemeColor", true)
+Corner(ProfileAvatar, 9999)
+Stroke(ProfileAvatar, T.Bd2, 1, 0.4)
+task.spawn(function()
+	local ok, image = pcall(function()
+		return Players:GetUserThumbnailAsync(LP.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+	end)
+	if ok and type(image) == "string" and image ~= "" and ProfileAvatar.Parent then
+		ProfileAvatar.Image = image
+	end
+end)
 local ProfileTitle = Instance.new("TextLabel")
 ProfileTitle.Parent = ProfileButton; ProfileTitle.BackgroundTransparency = 1
-ProfileTitle.Position = UDim2.fromOffset(11, 7); ProfileTitle.Size = UDim2.new(1, -22, 0, 18)
-ProfileTitle.Font = FB; ProfileTitle.TextSize = 12; ProfileTitle.TextColor3 = T.White
-ProfileTitle.TextXAlignment = Enum.TextXAlignment.Left; ProfileTitle.Text = "PRESSURE"
+ProfileTitle.Position = UDim2.new(0, 49, 0.5, -13); ProfileTitle.Size = UDim2.new(1, -56, 0, 15)
+ProfileTitle.Font = FM; ProfileTitle.TextSize = 12; ProfileTitle.TextColor3 = T.Tx
+ProfileTitle.TextXAlignment = Enum.TextXAlignment.Left; ProfileTitle.TextTruncate = Enum.TextTruncate.AtEnd
+ProfileTitle.Text = LP.DisplayName
 local ProfileSub = Instance.new("TextLabel")
 ProfileSub.Parent = ProfileButton; ProfileSub.BackgroundTransparency = 1
-ProfileSub.Position = UDim2.fromOffset(11, 25); ProfileSub.Size = UDim2.new(1, -22, 0, 16)
+ProfileSub.Position = UDim2.new(0, 49, 0.5, 2); ProfileSub.Size = UDim2.new(1, -56, 0, 11)
 ProfileSub.Font = F; ProfileSub.TextSize = 10; ProfileSub.TextColor3 = T.Tx3
 ProfileSub.TextXAlignment = Enum.TextXAlignment.Left; ProfileSub.TextTruncate = Enum.TextTruncate.AtEnd
 ProfileSub.Text = "@" .. tostring(LP.Name)
@@ -1409,6 +1468,8 @@ do
 	card.Name = "QuickStatus"; card.Parent = Sidebar; card.LayoutOrder = 100
 	card.Size = UDim2.new(1, 0, 0, 94); card.BackgroundColor3 = T.Card; card.BorderSizePixel = 0
 	Corner(card, 9); Stroke(card, T.Bd2, 1, 0.28)
+	local quickGradient = Grad(card, T.White:Lerp(T.Accent, 0.16), T.White:Lerp(T.Elev, 0.08), 90)
+	quickGradient.Name = "QuickStatusGradient"
 	local headMark = Instance.new("Frame")
 	headMark.Parent = card; headMark.Position = UDim2.fromOffset(9, 7); headMark.Size = UDim2.fromOffset(2, 11)
 	headMark.BackgroundColor3 = T.Accent; headMark.BorderSizePixel = 0; Corner(headMark, 2)
@@ -1482,7 +1543,7 @@ openAppearance = (function()
 	panel.Parent = SG
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.Position = UDim2.fromScale(0.5, 0.5)
-	panel.Size = UDim2.fromOffset(320, 402)
+	panel.Size = UDim2.fromOffset(320, 456)
 	panel.BackgroundColor3 = T.Card
 	panel.BorderSizePixel = 0
 	panel.Visible = false
@@ -1501,7 +1562,7 @@ openAppearance = (function()
 	subtitle.Parent = panel; subtitle.BackgroundTransparency = 1
 	subtitle.Position = UDim2.fromOffset(16, 34); subtitle.Size = UDim2.new(1, -32, 0, 18)
 	subtitle.Font = F; subtitle.TextSize = 10; subtitle.TextColor3 = T.Tx3
-	subtitle.TextXAlignment = Enum.TextXAlignment.Left; subtitle.Text = "Theme, readability and notification placement"
+	subtitle.TextXAlignment = Enum.TextXAlignment.Left; subtitle.Text = "Theme, HUD scale, readability and notifications"
 
 	local close = Instance.new("TextButton")
 	close.Parent = panel; close.AnchorPoint = Vector2.new(1, 0)
@@ -1546,13 +1607,18 @@ openAppearance = (function()
 	makeChoice("TEXT SIZE", textValues, function() return S.UITextScale end, function(value)
 		UIStyle:ApplyTextScale(value)
 	end, 1, function(value) return value == 0.88 and "Small" or (value == 1.18 and "Large" or "Normal") end)
+	makeChoice("HUD SIZE", { 0.8, 0.9, 1, 1.15, 1.3 }, function()
+		return S.HUDScale
+	end, function(value)
+		UIStyle:ApplyHUDScale(value)
+	end, 2, function(value) return tostring(math.floor(value * 100 + 0.5)) .. "%" end)
 	makeChoice("NOTIFICATION POSITION", { "Top Right", "Bottom Right", "Bottom Center", "Bottom Left", "Top Left", "Top Center" }, function()
 		return S.NotificationPosition
 	end, function(value)
 		UIStyle:PlaceNotifications(value)
-	end, 2)
+	end, 3)
 	local themeCard = Instance.new("Frame")
-	themeCard.Parent = body; themeCard.LayoutOrder = 3; themeCard.Size = UDim2.new(1, 0, 0, 126)
+	themeCard.Parent = body; themeCard.LayoutOrder = 4; themeCard.Size = UDim2.new(1, 0, 0, 150)
 	themeCard.BackgroundColor3 = T.BG; themeCard.BorderSizePixel = 0
 	Corner(themeCard, 9); Stroke(themeCard, T.Bd2, 1, 0.42)
 	local themeTitle = Instance.new("TextLabel")
@@ -1567,7 +1633,7 @@ openAppearance = (function()
 	grid.Parent = gridHost; grid.CellSize = UDim2.new(0.5, -3, 0, 20); grid.CellPadding = UDim2.fromOffset(6, 4)
 	grid.FillDirectionMaxCells = 2; grid.SortOrder = Enum.SortOrder.LayoutOrder
 	local themeButtons = {}
-	local themeNames = { "Graphite", "Ocean", "Forest", "Wine", "Violet", "Ember", "Amber", "Rose" }
+	local themeNames = { "Default", "Graphite", "Ocean", "Forest", "Wine", "Violet", "Ember", "Amber", "Rose" }
 	local function refreshThemes()
 		for name, button in pairs(themeButtons) do
 			local selected = name == S.UITheme
@@ -1598,7 +1664,7 @@ openAppearance = (function()
 	end
 
 	local executor = Instance.new("TextLabel")
-	executor.Parent = body; executor.LayoutOrder = 4; executor.Size = UDim2.new(1, 0, 0, 28)
+	executor.Parent = body; executor.LayoutOrder = 5; executor.Size = UDim2.new(1, 0, 0, 28)
 	executor.BackgroundColor3 = T.BG; executor.BorderSizePixel = 0
 	executor.Font = F; executor.TextSize = 10; executor.TextColor3 = T.Tx2
 	executor.TextXAlignment = Enum.TextXAlignment.Left
@@ -2584,6 +2650,7 @@ S._applyConfigData = function(data)
 	if type(data._ui) == "table" then
 		if data._ui.Theme then pcall(function() UIStyle:ApplyTheme(data._ui.Theme) end) end
 		if data._ui.TextScale then pcall(function() UIStyle:ApplyTextScale(data._ui.TextScale) end) end
+		if data._ui.HUDScale then pcall(function() UIStyle:ApplyHUDScale(data._ui.HUDScale) end) end
 		if data._ui.NotificationPosition then pcall(function() UIStyle:PlaceNotifications(data._ui.NotificationPosition) end) end
 	end
 	-- Apply sliders and other scalar values first, then toggles.  A toggle such
@@ -2616,7 +2683,7 @@ SaveConfigFile = function(name)
 		local data = {}
 		for key in pairs(CfgBind) do data[key] = S[key] end
 		data._keybinds = S.Keybinds
-		data._ui = { Theme = S.UITheme, TextScale = S.UITextScale, NotificationPosition = S.NotificationPosition }
+		data._ui = { Theme = S.UITheme, TextScale = S.UITextScale, HUDScale = S.HUDScale, NotificationPosition = S.NotificationPosition }
 		data._schema = 2
 		local path = "Pressure_Configs/" .. name .. ".json"
 		local encoded = HttpService:JSONEncode(data)
@@ -3408,27 +3475,45 @@ Corner(NextDoorTracer, 1)
 -- UI instances.
 local StatusHUD = Instance.new("Frame")
 StatusHUD.Name = "PressureStatusHUD"
+StatusHUD:SetAttribute("ScalableHUD", true)
 StatusHUD.AnchorPoint = Vector2.new(0, 1)
 StatusHUD.Position = UDim2.new(0, 18, 1, -20)
-StatusHUD.Size = UDim2.fromOffset(204, 92)
+StatusHUD.Size = UDim2.fromOffset(214, 104)
 StatusHUD.BackgroundColor3 = T.Card
-StatusHUD.BackgroundTransparency = 0.12
+StatusHUD.BackgroundTransparency = 0.01
 StatusHUD.BorderSizePixel = 0
 StatusHUD.Visible = false
 StatusHUD.Parent = ESPGui
-Corner(StatusHUD, 10)
-Stroke(StatusHUD, T.Bd2, 1, 0.38)
-Grad(StatusHUD, T.White:Lerp(T.Accent, 0.12), T.White:Lerp(T.Elev, 0.08), 90)
+Corner(StatusHUD, 11)
+Stroke(StatusHUD, T.Bd2, 1, 0.22)
+Shadow(StatusHUD, 0.76)
+do
+local statusSurface = Grad(StatusHUD, T.White:Lerp(T.Accent, 0.12), T.White:Lerp(T.Elev, 0.08), 90)
+statusSurface.Name = "HUDSurfaceGradient"
+local statusTop = Instance.new("Frame")
+statusTop.Parent = StatusHUD; statusTop.Size = UDim2.new(1, 0, 0, 28)
+statusTop.BackgroundColor3 = T.Elev; statusTop.BackgroundTransparency = 0.025; statusTop.BorderSizePixel = 0
+Corner(statusTop, 10)
+local statusHeaderGradient = Grad(statusTop, T.White:Lerp(T.Accent, 0.14), T.White:Lerp(T.Card, 0.06), 0)
+statusHeaderGradient.Name = "HUDHeaderGradient"
+local statusTopLine = Instance.new("Frame")
+statusTopLine.Parent = statusTop; statusTopLine.AnchorPoint = Vector2.new(0, 1)
+statusTopLine.Position = UDim2.new(0, 0, 1, 0); statusTopLine.Size = UDim2.new(1, 0, 0, 1)
+statusTopLine.BackgroundColor3 = T.Bd; statusTopLine.BackgroundTransparency = 0.2; statusTopLine.BorderSizePixel = 0
+local statusTick = Instance.new("Frame")
+statusTick.Parent = statusTop; statusTick.Position = UDim2.new(0, 8, 0.5, -6); statusTick.Size = UDim2.fromOffset(2, 12)
+statusTick.BackgroundColor3 = T.Accent; statusTick.BorderSizePixel = 0; Corner(statusTick, 2)
 
 local statusHeader = Instance.new("TextLabel")
-statusHeader.Parent = StatusHUD; statusHeader.BackgroundTransparency = 1
-statusHeader.Position = UDim2.fromOffset(12, 7); statusHeader.Size = UDim2.new(1, -24, 0, 16)
-statusHeader.Font = FB; statusHeader.TextSize = 11; statusHeader.TextColor3 = T.Tx2
+statusHeader.Parent = statusTop; statusHeader.BackgroundTransparency = 1
+statusHeader.Position = UDim2.fromOffset(16, 0); statusHeader.Size = UDim2.new(1, -24, 1, 0)
+statusHeader.Font = FB; statusHeader.TextSize = 11; statusHeader.TextColor3 = T.Tx
 statusHeader.TextXAlignment = Enum.TextXAlignment.Left; statusHeader.Text = "HADAL // VITALS"
+end
 
 local statusRoom = Instance.new("TextLabel")
 statusRoom.Parent = StatusHUD; statusRoom.BackgroundTransparency = 1
-statusRoom.Position = UDim2.fromOffset(12, 25); statusRoom.Size = UDim2.new(1, -24, 0, 16)
+statusRoom.Position = UDim2.fromOffset(12, 31); statusRoom.Size = UDim2.new(1, -24, 0, 16)
 statusRoom.Font = FM; statusRoom.TextSize = 12; statusRoom.TextColor3 = T.White
 statusRoom.TextXAlignment = Enum.TextXAlignment.Left; statusRoom.Text = "ROOM —"
 
@@ -3439,37 +3524,55 @@ local function mkVitalRow(parent, label, y)
 	text.Font = F; text.TextSize = 11; text.TextColor3 = T.Tx2; text.TextXAlignment = Enum.TextXAlignment.Left
 	local back = Instance.new("Frame")
 	back.Parent = parent; back.Position = UDim2.fromOffset(12, y + 16); back.Size = UDim2.new(1, -24, 0, 4)
-	back.BackgroundColor3 = Color3.fromRGB(40, 47, 53); back.BorderSizePixel = 0; Corner(back, 2)
+	back.BackgroundColor3 = T.Bd2; back.BorderSizePixel = 0; Corner(back, 2)
 	local fill = Instance.new("Frame")
 	fill.Parent = back; fill.Size = UDim2.new(1, 0, 1, 0); fill.BackgroundColor3 = T.Tx
 	fill.BorderSizePixel = 0; Corner(fill, 2)
 	return text, fill
 end
-local oxygenText, oxygenFill = mkVitalRow(StatusHUD, "", 43)
-local healthText, healthFill = mkVitalRow(StatusHUD, "", 66)
+local oxygenText, oxygenFill = mkVitalRow(StatusHUD, "", 49)
+local healthText, healthFill = mkVitalRow(StatusHUD, "", 73)
 
 -- Bound controls get a separate, compact HUD.  Toggle rows appear only while
 -- they are active; action buttons remain visible so their hotkeys are never a
 -- mystery.  It automatically sits above the vitals card when both are enabled.
 local KeybindHUD = Instance.new("Frame")
 KeybindHUD.Name = "PressureKeybindHUD"
+KeybindHUD:SetAttribute("ScalableHUD", true)
 KeybindHUD.AnchorPoint = Vector2.new(0, 1)
 KeybindHUD.Position = UDim2.new(0, 18, 1, -20)
 KeybindHUD.Size = UDim2.fromOffset(228, 30)
 KeybindHUD.BackgroundColor3 = T.Card
-KeybindHUD.BackgroundTransparency = 0.12
+KeybindHUD.BackgroundTransparency = 0.01
 KeybindHUD.BorderSizePixel = 0
 KeybindHUD.Visible = false
 KeybindHUD.Parent = ESPGui
-Corner(KeybindHUD, 10)
-Stroke(KeybindHUD, T.Accent, 1, 0.38)
-Grad(KeybindHUD, T.White:Lerp(T.Accent, 0.12), T.White:Lerp(T.Elev, 0.08), 90)
+Corner(KeybindHUD, 11)
+Stroke(KeybindHUD, T.Bd2, 1, 0.22)
+Shadow(KeybindHUD, 0.76)
+do
+local keybindSurface = Grad(KeybindHUD, T.White:Lerp(T.Accent, 0.12), T.White:Lerp(T.Elev, 0.08), 90)
+keybindSurface.Name = "HUDSurfaceGradient"
+local keybindTop = Instance.new("Frame")
+keybindTop.Parent = KeybindHUD; keybindTop.Size = UDim2.new(1, 0, 0, 28)
+keybindTop.BackgroundColor3 = T.Elev; keybindTop.BackgroundTransparency = 0.025; keybindTop.BorderSizePixel = 0
+Corner(keybindTop, 10)
+local keybindHeaderGradient = Grad(keybindTop, T.White:Lerp(T.Accent, 0.14), T.White:Lerp(T.Card, 0.06), 0)
+keybindHeaderGradient.Name = "HUDHeaderGradient"
+local keybindTopLine = Instance.new("Frame")
+keybindTopLine.Parent = keybindTop; keybindTopLine.AnchorPoint = Vector2.new(0, 1)
+keybindTopLine.Position = UDim2.new(0, 0, 1, 0); keybindTopLine.Size = UDim2.new(1, 0, 0, 1)
+keybindTopLine.BackgroundColor3 = T.Bd; keybindTopLine.BackgroundTransparency = 0.2; keybindTopLine.BorderSizePixel = 0
+local keybindTick = Instance.new("Frame")
+keybindTick.Parent = keybindTop; keybindTick.Position = UDim2.new(0, 8, 0.5, -6); keybindTick.Size = UDim2.fromOffset(2, 12)
+keybindTick.BackgroundColor3 = T.Accent; keybindTick.BorderSizePixel = 0; Corner(keybindTick, 2)
 
 local keybindTitle = Instance.new("TextLabel")
-keybindTitle.Parent = KeybindHUD; keybindTitle.BackgroundTransparency = 1
-keybindTitle.Position = UDim2.fromOffset(12, 7); keybindTitle.Size = UDim2.new(1, -24, 0, 15)
-keybindTitle.Font = FB; keybindTitle.TextSize = 11; keybindTitle.TextColor3 = T.Tx2
+keybindTitle.Parent = keybindTop; keybindTitle.BackgroundTransparency = 1
+keybindTitle.Position = UDim2.fromOffset(16, 0); keybindTitle.Size = UDim2.new(1, -24, 1, 0)
+keybindTitle.Font = FB; keybindTitle.TextSize = 11; keybindTitle.TextColor3 = T.Tx
 keybindTitle.TextXAlignment = Enum.TextXAlignment.Left; keybindTitle.Text = "KEYBINDS"
+end
 
 local KeybindRows = {}
 local function getKeybindRow(index)
@@ -3511,12 +3614,13 @@ S._refreshKeybindHUD = function()
 	table.sort(entries, function(a, b) return a.entry.label < b.entry.label end)
 	KeybindHUD.Visible = S.KeybindHUD == true and #entries > 0
 	if not KeybindHUD.Visible then return end
-	local height = 29 + (#entries * 21)
+	local height = 36 + (#entries * 23)
 	KeybindHUD.Size = UDim2.fromOffset(228, height)
-	KeybindHUD.Position = UDim2.new(0, 18, 1, S.StatusHUD and -122 or -20)
+	local statusOffset = S.StatusHUD and (math.floor(104 * S.HUDScale + 0.5) + 10) or 0
+	KeybindHUD.Position = UDim2.new(0, 18, 1, -20 - statusOffset)
 	for i, data in ipairs(entries) do
 		local row = getKeybindRow(i)
-		row.Position = UDim2.new(0, 8, 0, 25 + ((i - 1) * 21))
+		row.Position = UDim2.new(0, 8, 0, 32 + ((i - 1) * 23))
 		row.Visible = true
 		row.Label.Text = string.upper(data.entry.label)
 		row.Key.Text = S._bindTokenTitle(data.token)
@@ -3525,6 +3629,7 @@ S._refreshKeybindHUD = function()
 	end
 	for i = #entries + 1, #KeybindRows do KeybindRows[i].Visible = false end
 end
+UIStyle:ApplyHUDScale(S.HUDScale)
 S._markKeybindHUDDirty()
 
 -- Up to four nearest off-screen threats.  The arrow itself rotates; the name
