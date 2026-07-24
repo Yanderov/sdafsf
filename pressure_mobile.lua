@@ -626,7 +626,7 @@ local function Corner(i, r) local c = Instance.new("UICorner"); c.CornerRadius =
 local function Stroke(i, col, th, tr)
 	local s = Instance.new("UIStroke")
 	s.Color = col or T.Bd; s.Thickness = th or 1; s.Transparency = tr or 0
-	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; s.Parent = i
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual; s.Parent = i
 	return s
 end
 local function Grad(i, c1, c2, rot)
@@ -643,7 +643,7 @@ end
 local function Shadow(i, tr)
 	local s = Instance.new("UIStroke")
 	s.Color = T.Bd2; s.Thickness = 2; s.Transparency = tr or 0.6
-	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; s.Parent = i
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual; s.Parent = i
 	return s
 end
 local function Tween(inst, time, props, style, dir)

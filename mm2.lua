@@ -655,7 +655,7 @@ local function Stroke(i, col, th, tr)
     s.Color = col or T.Bd
     s.Thickness = th or 1
     s.Transparency = tr or 0
-    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
     s.LineJoinMode = Enum.LineJoinMode.Round
     s.Parent = i
     return s
@@ -681,7 +681,7 @@ local function Shadow(i, transparency)
     s.Color = T.Bd2; pcall(function() s:SetAttribute("ThemeColorRole_Color", "Bd2") end)
     s.Thickness = 2
     s.Transparency = transparency or 0.6
-    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
     s.LineJoinMode = Enum.LineJoinMode.Round
     s.Parent = i
     return s

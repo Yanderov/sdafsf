@@ -180,7 +180,7 @@ local function Stroke(i, col, th, tr)
 	s.Color = col or T.Bd
 	s.Thickness = th or 1
 	s.Transparency = tr or 0
-	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
 	s.Parent = i
 	return s
 end
@@ -205,7 +205,7 @@ local function Shadow(i, transparency)
 	s.Color = T.Bd2
 	s.Thickness = 2
 	s.Transparency = transparency or 0.6
-	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
 	s.Parent = i
 	return s
 end
@@ -2437,24 +2437,23 @@ end
 
 -- Mouse Unlock overrides
 do
-	local capturedBehavior = nil
-	local function forceMouseDefault()
+	local _modalBtn = Instance.new("TextButton")
+	_modalBtn.Name = "InertiaModalUnlock"
+	_modalBtn.BackgroundTransparency = 1
+	_modalBtn.Text = ""
+	_modalBtn.Size = UDim2.fromScale(0, 0)
+	_modalBtn.Parent = SG
+	local _lastNeed = false
+	tc(RS.RenderStepped:Connect(function()
 		local needsFreeMouse = Main.Visible or MouseUnlocked
-		if needsFreeMouse then
-			if capturedBehavior == nil then
-				capturedBehavior = UIS.MouseBehavior
-			end
-			if UIS.MouseBehavior ~= Enum.MouseBehavior.Default then
-				UIS.MouseBehavior = Enum.MouseBehavior.Default
-			end
-			if not UIS.MouseIconEnabled then
+		if needsFreeMouse ~= _lastNeed then
+			_lastNeed = needsFreeMouse
+			_modalBtn.Modal = needsFreeMouse
+			if needsFreeMouse then
 				UIS.MouseIconEnabled = true
 			end
-		else
-			capturedBehavior = nil
 		end
-	end
-	tc(RS.RenderStepped:Connect(forceMouseDefault))
+	end))
 		
 	S.MouseUnlockCleanup = function()
 	end
