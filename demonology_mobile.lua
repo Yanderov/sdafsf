@@ -647,7 +647,7 @@ makeElementDraggable = function(frame, handle)
 	local dragging, dragInput, dragStart, startPos
 	handle.InputBegan:Connect(function(input)
 		if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) and frame.Active then
-			if frame == Main or string.find(frame.Name, "Watermark") or (not hudLocked) then
+			if frame == Main or string.find(frame.Name, "Watermark") or string.find(frame.Name, "Settings") or (not hudLocked) then
 				dragging = true
 				dragStart = input.Position
 				startPos = frame.Position
@@ -1066,6 +1066,7 @@ openAppearance = (function()
 	executor.Text = "   EXECUTOR   " .. executorName; Corner(executor, 8); Stroke(executor, T.Bd2, 1, 0.44)
 	for _, object in ipairs(panel:GetDescendants()) do if object:IsA("GuiObject") then object.ZIndex = math.max(object.ZIndex, 1501) end end
 
+	makeElementDraggable(panel, title)
 	local opened = false
 	local function setOpen(value)
 		opened = value
@@ -2443,10 +2444,14 @@ do
 		local portrait = vp.Y >= vp.X
 
 		if MOBILE then
-			-- Portrait: a tall sheet with breathing room at the edges.
-			-- Landscape: narrower and near-full height — a full-width sheet there
-			-- is a wall of empty space with the controls stretched across it.
-			expandedSize = portrait and UDim2.fromScale(0.92, 0.82) or UDim2.fromScale(0.62, 0.92)
+			if portrait then
+				WW = math.floor(vp.X * 0.95)
+				WH = math.min(600, math.floor(vp.Y * 0.85))
+			else
+				WW = math.min(640, math.floor(vp.X * 0.94))
+				WH = math.min(360, math.floor(vp.Y * 0.92))
+			end
+			expandedSize = UDim2.fromOffset(WW, WH)
 		else
 			WW = math.min(900, math.floor(vp.X - 40))
 			WH = math.min(580, math.floor(vp.Y - 40))

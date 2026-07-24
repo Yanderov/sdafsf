@@ -1846,6 +1846,7 @@ openAppearance = (function()
 	Corner(executor, 8); Stroke(executor, T.Bd2, 1, 0.44)
 	for _, object in ipairs(panel:GetDescendants()) do if object:IsA("GuiObject") then object.ZIndex = math.max(object.ZIndex, 1501) end end
 
+	makeElementDraggable(panel, title)
 	local opened = false
 	local function setOpen(value)
 		opened = value
