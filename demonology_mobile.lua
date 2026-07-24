@@ -1863,7 +1863,7 @@ local function mkSlider(parent, label, min, max, def, callback, order)
 		vlbl.Text = tostring(v)
 	end
 	upd(val)
-	local active = false
+		local activeInput = nil
 	local function fromMouse(input)
 		local bp = bar.AbsolutePosition
 		local bs = bar.AbsoluteSize
@@ -1876,29 +1876,23 @@ local function mkSlider(parent, label, min, max, def, callback, order)
 			if S._RequestAutoSave then S._RequestAutoSave() end
 		end
 	end
-	-- Touch counts as a drag here.  Matching only MouseButton1/MouseMovement (as
-	-- this did) makes every slider dead on a phone — you could see the bar but
-	-- never move it.  Freezing the page scroll for the drag is the other half:
-	-- a touch drag inside a ScrollingFrame scrolls the page as well.
 	frame.InputBegan:Connect(function(i)
 		if i.UserInputType == Enum.UserInputType.MouseButton1
 			or i.UserInputType == Enum.UserInputType.Touch then
-			active = true
+			activeInput = i
 			ContentArea.ScrollingEnabled = false
 			fromMouse(i)
 		end
 	end)
 	tc(UIS.InputChanged:Connect(function(i)
-		if active and (i.UserInputType == Enum.UserInputType.MouseMovement
-			or i.UserInputType == Enum.UserInputType.Touch) then
+		if activeInput == i then
 			fromMouse(i)
 		end
 	end))
 	tc(UIS.InputEnded:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1
-			or i.UserInputType == Enum.UserInputType.Touch then
-			if active then ContentArea.ScrollingEnabled = true end
-			active = false
+		if activeInput == i then
+			ContentArea.ScrollingEnabled = true
+			activeInput = nil
 		end
 	end))
 	local api = { get = function() return val end }

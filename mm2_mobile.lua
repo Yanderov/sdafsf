@@ -3177,40 +3177,38 @@ mkSlider = function(parent, label, min, max, def, callback, order, skipSearchReg
         vlbl.Text = tostring(v)
     end
     upd(val)
-    local active = false
-    local function fromMouse(input)
-        local bp = bar.AbsolutePosition
-        local bs = bar.AbsoluteSize
-        local pct = math.clamp((input.Position.X - bp.X) / bs.X, 0, 1)
-        local nv = math.floor(min + (max - min) * pct + 0.5)
-        if nv ~= val then
-            val = nv
-            upd(val)
-            callback(val)
-        end
-    end
-    -- Touch counts as a drag here. Matching only MouseButton1/MouseMovement (as
-    -- this did) leaves every slider dead on a phone. Freezing the page scroll
-    -- for the drag is the other half: a touch drag inside a ScrollingFrame
-    -- scrolls the page as well as moving the slider.
-    frame.InputBegan:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-            active = true
-            if MOBILE then ContentArea.ScrollingEnabled = false end
-            fromMouse(i)
-        end
-    end)
-    tc(UIS.InputChanged:Connect(function(i)
-        if active and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
-            fromMouse(i)
-        end
-    end))
-    tc(UIS.InputEnded:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-            if active and MOBILE then ContentArea.ScrollingEnabled = true end
-            active = false
-        end
-    end))
+    	local activeInput = nil
+	local function fromMouse(input)
+		local bp = bar.AbsolutePosition
+		local bs = bar.AbsoluteSize
+		local pct = math.clamp((input.Position.X - bp.X) / bs.X, 0, 1)
+		local nv = math.floor(min + (max - min) * pct + 0.5)
+		if nv ~= val then
+			val = nv
+			upd(val)
+			callback(val)
+			if S._RequestAutoSave then S._RequestAutoSave() end
+		end
+	end
+	frame.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1
+			or i.UserInputType == Enum.UserInputType.Touch then
+			activeInput = i
+			ContentArea.ScrollingEnabled = false
+			fromMouse(i)
+		end
+	end)
+	tc(UIS.InputChanged:Connect(function(i)
+		if activeInput == i then
+			fromMouse(i)
+		end
+	end))
+	tc(UIS.InputEnded:Connect(function(i)
+		if activeInput == i then
+			ContentArea.ScrollingEnabled = true
+			activeInput = nil
+		end
+	end))
     if not skipSearchRegistry then
         table.insert(UIRegistry, { label = string.lower(label), row = frame, card = parent.Parent })
     end
