@@ -4623,6 +4623,23 @@ do
 	local iTime = islandMetric(303, 60, "TIME")
 	makeElementDraggable(island, island)
 	HUDEls["Watermark"] = { frame = island, content = island, setLocked = function(v) end }
+
+	local islandTapStart
+	island.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			islandTapStart = input.Position
+		end
+	end)
+	island.InputEnded:Connect(function(input)
+		if islandTapStart and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = (input.Position - islandTapStart).Magnitude
+			if delta < 10 then
+				setMenuOpen(not MenuOpen)
+			end
+			islandTapStart = nil
+		end
+	end)
+
 	mkToggle(panels, "Dynamic Island", MOBILE, function(v)
 		island.Visible = v
 		NotifyToggle("Dynamic Island", v)
@@ -4699,7 +4716,7 @@ if MOBILE and Pages["Buttons"] then
 	-- The menu button drives the window itself rather than a game feature, and
 	-- it is the one button that cannot be removed: deleting it on a device with
 	-- no keyboard would leave no way to reopen the menu at all.
-	S._floatRegister("ui:menu", "Menu", function() setMenuOpen(not MenuOpen) end, function() return MenuOpen end)
+	-- Menu float button removed per user request
 
 	local secFloat = mkSection(Pages["Buttons"], "Floating Buttons", 1)
 
