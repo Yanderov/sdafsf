@@ -6738,7 +6738,7 @@ local function mkStatHUD(name, pos, w, z)
     lbl.TextYAlignment = Enum.TextYAlignment.Center
     lbl.Text = "\u{2014}"
     lbl.ZIndex = z + 1
-    attachHUDDrag(f)
+    task.defer(function() attachHUDDrag(f) end)
     HUDEls[name] = { frame = f, content = f }
     return HUDEls[name], lbl
 end
@@ -6959,7 +6959,7 @@ local function mkWatermark()
     HUD.islandPing = metric(201, 48, "PING")
     HUD.islandFPS = metric(254, 44, "FPS")
     HUD.islandSession = metric(303, 60, "TIME")
-    attachHUDDrag(f)
+    task.defer(function() attachHUDDrag(f) end)
     HUDEls["Watermark"] = { frame = f, content = f }
 
 	local islandTapStart

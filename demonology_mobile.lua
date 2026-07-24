@@ -4655,7 +4655,7 @@ do
 	local iPing = islandMetric(201, 48, "PING")
 	local iFps = islandMetric(254, 44, "FPS")
 	local iTime = islandMetric(303, 60, "TIME")
-	makeElementDraggable(island, island)
+	task.defer(function() makeElementDraggable(island, island) end)
 	HUDEls["Watermark"] = { frame = island, content = island, setLocked = function(v) end }
 
 	local islandTapStart
