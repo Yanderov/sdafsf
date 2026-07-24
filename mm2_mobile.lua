@@ -13407,15 +13407,16 @@ end
 S._UIBuildReady = true
 
 -- ===================== MOBILE BUILD =====================
--- Touch devices have no keyboard, so this build replaces every keybind with an
--- on-screen control:
---   * a draggable launcher button toggles the menu (tap), because the keyboard
---     toggle key can never fire on a phone;
---   * a long-press opens a quick panel that turns every registered bindable
---     action into a button calling exactly the same function the key used to.
--- Nothing else about the script changes. Wrapped in an immediately-invoked
--- function so these locals get their own register scope -- a plain do-block
--- would still count against the chunk's 200-local budget, which mm2 sits near.
+-- Phone build. Three things differ from the desktop script:
+--   1. The whole menu is scaled down to fit the actual screen, so nothing ever
+--      sits off the edge of a phone where it cannot be reached.
+--   2. Keybinds are stripped: the key chips/badges are hidden and the bind
+--      table is emptied, because no key can ever be pressed on a touch device.
+--   3. Every action that used to live on a key becomes a button in the ACTIONS
+--      panel, calling the exact same function the key used to fire.
+-- Wrapped in an immediately-invoked function so the added locals get their own
+-- register scope -- a plain do-block would still count against the chunk's
+-- 200-local budget, which mm2 sits near.
 ;(function()
 	local MobileUIS = game:GetService("UserInputService")
 
@@ -13434,31 +13435,91 @@ S._UIBuildReady = true
 		return list
 	end
 
-	local launcher = Instance.new("TextButton")
-	launcher.Name = "MobileLauncher"
-	launcher.Parent = SG
-	launcher.Active = true
-	launcher.AnchorPoint = Vector2.new(0, 0.5)
-	launcher.Position = UDim2.new(0, 12, 0.42, 0)
-	launcher.Size = UDim2.fromOffset(54, 54)
-	launcher.BackgroundColor3 = T.Card
-	launcher.BackgroundTransparency = 0.02
-	launcher.BorderSizePixel = 0
-	launcher.AutoButtonColor = false
-	launcher.Font = FB
-	launcher.TextSize = 11
-	launcher.TextColor3 = T.White
-	launcher.Text = "MENU"
-	launcher.ZIndex = 900
-	Corner(launcher, 27)
-	Stroke(launcher, T.Bd2, 1, 0.2)
+	-- Key badges are meaningless without a keyboard: hide them (now and for any
+	-- row built later) and empty the dispatch table.
+	local function stripBinds()
+		local function hide(d)
+			if d.Name == "BindBadge" then pcall(function() d.Visible = false end) end
+		end
+		for _, d in ipairs(SG:GetDescendants()) do hide(d) end
+		SG.DescendantAdded:Connect(function(d) task.defer(hide, d) end)
+		for key in pairs(BindReg) do BindReg[key] = nil end
+	end
+	stripBinds()
+
+	-- Full-screen scale factor so the menu (built at desktop pixel sizes) never
+	-- runs off a phone screen: shrink to fit both viewport dimensions with a
+	-- margin, but never blow the window up past its designed size.
+	local menuScale = Instance.new("UIScale")
+	menuScale.Name = "MobileFitScale"
+	local function fitMenu()
+		if not Main then return end
+		local vp = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize
+		if not vp then return end
+		local w, h = Main.AbsoluteSize.X, Main.AbsoluteSize.Y
+		if w < 1 or h < 1 then return end
+		local factor = math.min((vp.X - 24) / w, (vp.Y - 24) / h, 1)
+		menuScale.Scale = math.max(factor, 0.35)
+	end
+	if Main then
+		menuScale.Parent = Main
+		fitMenu()
+		Main:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitMenu)
+		workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(fitMenu)
+	end
+
+	-- Two on-screen buttons replace the keyboard entirely: MENU (the old toggle
+	-- key) and ACTIONS (every other key, as a button list). Both visible and
+	-- labeled -- nothing is hidden behind a long-press.
+	local function mkLauncherButton(text, yOffset, onClick)
+		local b = Instance.new("TextButton")
+		b.Parent = SG
+		b.Active = true
+		b.AnchorPoint = Vector2.new(0, 0.5)
+		b.Position = UDim2.new(0, 10, 0.4, yOffset)
+		b.Size = UDim2.fromOffset(64, 44)
+		b.BackgroundColor3 = T.Card
+		b.BackgroundTransparency = 0.02
+		b.BorderSizePixel = 0
+		b.AutoButtonColor = false
+		b.Font = FB
+		b.TextSize = 12
+		b.TextColor3 = T.White
+		b.Text = text
+		b.ZIndex = 900
+		Corner(b, 10)
+		Stroke(b, T.Bd2, 1, 0.2)
+		local pressPos, dragging = nil, false
+		b.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+				pressPos, dragging = input.Position, false
+			end
+		end)
+		MobileUIS.InputChanged:Connect(function(input)
+			if not pressPos then return end
+			if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
+				local delta = input.Position - pressPos
+				if dragging or math.abs(delta.X) > 6 or math.abs(delta.Y) > 6 then
+					dragging = true
+					b.Position = UDim2.new(0, b.AbsolutePosition.X + delta.X, 0, b.AbsolutePosition.Y + delta.Y + b.AbsoluteSize.Y / 2)
+					pressPos = input.Position
+				end
+			end
+		end)
+		MobileUIS.InputEnded:Connect(function(input)
+			if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+			if pressPos and not dragging then onClick() end
+			pressPos, dragging = nil, false
+		end)
+		return b
+	end
 
 	local panel = Instance.new("Frame")
-	panel.Name = "MobileQuickPanel"
+	panel.Name = "MobileActionsPanel"
 	panel.Parent = SG
 	panel.AnchorPoint = Vector2.new(0, 0.5)
-	panel.Position = UDim2.new(0, 74, 0.5, 0)
-	panel.Size = UDim2.fromOffset(214, 306)
+	panel.Position = UDim2.new(0, 84, 0.5, 0)
+	panel.Size = UDim2.fromOffset(220, 320)
 	panel.BackgroundColor3 = T.Card
 	panel.BackgroundTransparency = 0.02
 	panel.BorderSizePixel = 0
@@ -13466,6 +13527,13 @@ S._UIBuildReady = true
 	panel.ZIndex = 900
 	Corner(panel, 12)
 	Stroke(panel, T.Bd2, 1, 0.2)
+	local function fitPanel()
+		local vp = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize
+		if not vp then return end
+		panel.Size = UDim2.fromOffset(220, math.min(320, vp.Y - 90))
+	end
+	fitPanel()
+	workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(fitPanel)
 
 	local panelHead = Instance.new("TextLabel")
 	panelHead.Parent = panel
@@ -13473,10 +13541,10 @@ S._UIBuildReady = true
 	panelHead.Position = UDim2.fromOffset(12, 0)
 	panelHead.Size = UDim2.new(1, -24, 0, 30)
 	panelHead.Font = FB
-	panelHead.TextSize = 11
+	panelHead.TextSize = 12
 	panelHead.TextColor3 = T.Tx2
 	panelHead.TextXAlignment = Enum.TextXAlignment.Left
-	panelHead.Text = "QUICK ACTIONS"
+	panelHead.Text = "ACTIONS"
 	panelHead.ZIndex = 901
 
 	local scroll = Instance.new("ScrollingFrame")
@@ -13485,7 +13553,7 @@ S._UIBuildReady = true
 	scroll.Size = UDim2.new(1, -16, 1, -40)
 	scroll.BackgroundTransparency = 1
 	scroll.BorderSizePixel = 0
-	scroll.ScrollBarThickness = 3
+	scroll.ScrollBarThickness = 4
 	scroll.CanvasSize = UDim2.new()
 	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	scroll.ScrollingDirection = Enum.ScrollingDirection.Y
@@ -13504,11 +13572,11 @@ S._UIBuildReady = true
 			local empty = Instance.new("TextLabel")
 			empty.Parent = scroll
 			empty.BackgroundTransparency = 1
-			empty.Size = UDim2.new(1, -4, 0, 30)
+			empty.Size = UDim2.new(1, -4, 0, 34)
 			empty.Font = FM
-			empty.TextSize = 12
+			empty.TextSize = 13
 			empty.TextColor3 = T.Tx4
-			empty.Text = "No bindable actions"
+			empty.Text = "No actions"
 			empty.ZIndex = 902
 			return
 		end
@@ -13516,13 +13584,13 @@ S._UIBuildReady = true
 			local row = Instance.new("TextButton")
 			row.Parent = scroll
 			row.LayoutOrder = index
-			row.Size = UDim2.new(1, -4, 0, 34)
+			row.Size = UDim2.new(1, -4, 0, 40)
 			row.BackgroundColor3 = T.Elev
 			row.BackgroundTransparency = 0.1
 			row.BorderSizePixel = 0
 			row.AutoButtonColor = false
 			row.Font = FM
-			row.TextSize = 12
+			row.TextSize = 13
 			row.TextColor3 = T.Tx
 			row.TextXAlignment = Enum.TextXAlignment.Left
 			row.Text = "   " .. action.label
@@ -13532,8 +13600,8 @@ S._UIBuildReady = true
 			local dot = Instance.new("Frame")
 			dot.Parent = row
 			dot.AnchorPoint = Vector2.new(1, 0.5)
-			dot.Position = UDim2.new(1, -9, 0.5, 0)
-			dot.Size = UDim2.fromOffset(7, 7)
+			dot.Position = UDim2.new(1, -10, 0.5, 0)
+			dot.Size = UDim2.fromOffset(8, 8)
 			dot.BackgroundColor3 = T.Tx4
 			dot.BorderSizePixel = 0
 			dot.Visible = action.isOn ~= nil
@@ -13552,35 +13620,11 @@ S._UIBuildReady = true
 		end
 	end
 
-	-- One input pipeline for the launcher: tap = menu, long-press = quick panel,
-	-- drag = move. Adding MouseButton1Click as well would double-fire on a tap.
-	local pressAt, pressPos, dragging = nil, nil, false
-	launcher.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-			pressAt, pressPos, dragging = tick(), input.Position, false
-		end
+	mkLauncherButton("MENU", 0, function()
+		if Main then Main.Visible = not Main.Visible end
 	end)
-	MobileUIS.InputChanged:Connect(function(input)
-		if not pressPos then return end
-		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
-			local delta = input.Position - pressPos
-			if math.abs(delta.X) > 6 or math.abs(delta.Y) > 6 then
-				dragging = true
-				launcher.Position = UDim2.new(0, launcher.AbsolutePosition.X + delta.X, 0, launcher.AbsolutePosition.Y + delta.Y + launcher.AbsoluteSize.Y / 2)
-				pressPos = input.Position
-			end
-		end
-	end)
-	MobileUIS.InputEnded:Connect(function(input)
-		if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
-		if pressAt and not dragging then
-			if tick() - pressAt >= 0.45 then
-				buildPanel()
-				panel.Visible = not panel.Visible
-			elseif Main then
-				Main.Visible = not Main.Visible
-			end
-		end
-		pressAt, pressPos, dragging = nil, nil, false
+	mkLauncherButton("ACTIONS", 54, function()
+		buildPanel()
+		panel.Visible = not panel.Visible
 	end)
 end)()

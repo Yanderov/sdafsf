@@ -101,9 +101,9 @@ Header.Size = UDim2.new(1, 0, 0, 44)
 Header.BackgroundTransparency = 1
 Header.Active = true
 
-local Brand = text(Header, "INERTIA", 14, T.White, Enum.Font.GothamBold)
+local Brand = text(Header, "INERTIA", 17, T.White, Enum.Font.GothamBold)
 Brand.Position = UDim2.fromOffset(18, 0)
-Brand.Size = UDim2.fromOffset(120, 44)
+Brand.Size = UDim2.fromOffset(140, 44)
 Brand.TextXAlignment = Enum.TextXAlignment.Left
 
 local Close = Instance.new("TextButton")
@@ -121,7 +121,7 @@ Close.Font = Enum.Font.GothamMedium
 corner(Close, 7)
 stroke(Close, 0.46)
 
-local Status = text(Main, MOBILE and "mobile build" or "", 9, T.Dim, Enum.Font.Gotham)
+local Status = text(Main, MOBILE and "mobile build" or "", 11, T.Dim, Enum.Font.Gotham)
 Status.AnchorPoint = Vector2.new(0.5, 1)
 Status.Position = UDim2.new(0.5, 0, 1, -10)
 Status.Size = UDim2.new(1, -32, 0, 14)
@@ -204,7 +204,7 @@ for index, entry in ipairs(Games) do
 	corner(icon, 10)
 	stroke(icon, 0.5)
 
-	local name = text(tile, entry.name, 11, T.Text, Enum.Font.GothamMedium)
+	local name = text(tile, entry.name, 13, T.Text, Enum.Font.GothamMedium)
 	name.Position = UDim2.fromOffset(8, 128)
 	name.Size = UDim2.new(1, -16, 0, 20)
 	name.TextXAlignment = Enum.TextXAlignment.Center
@@ -212,7 +212,7 @@ for index, entry in ipairs(Games) do
 
 	tile.MouseEnter:Connect(function()
 		TweenService:Create(tile, TweenInfo.new(0.13), { BackgroundColor3 = T.Hover }):Play()
-		TweenService:Create(tileStroke, TweenInfo.new(0.13), { Color = T.White, Transparency = 0.24 }):Play()
+		TweenService:Create(tileStroke, TweenInfo.new(0.13), { Color = T.Text, Transparency = 0.55 }):Play()
 	end)
 	tile.MouseLeave:Connect(function()
 		TweenService:Create(tile, TweenInfo.new(0.13), { BackgroundColor3 = T.Card }):Play()
