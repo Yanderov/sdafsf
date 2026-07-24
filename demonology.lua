@@ -571,10 +571,10 @@ local mainSt = Stroke(Main, T.Bd, 1, 0.1)
 Shadow(Main, 0.15)
 Grad(Main, T.White:Lerp(T.Accent, 0.10), T.White:Lerp(T.Elev, 0.06), 90)
 if MOBILE then
-	-- Upper bound only: on a tablet the sheet stops growing instead of turning
-	-- into a stretched desktop window.
+	-- Upper bound only, and wide enough for a landscape phone sheet — the old
+	-- 560 cap was what kept the menu a narrow vertical strip in landscape.
 	local limit = Instance.new("UISizeConstraint")
-	limit.MaxSize = Vector2.new(560, 940)
+	limit.MaxSize = Vector2.new(960, 940)
 	limit.MinSize = Vector2.new(260, 300)
 	limit.Parent = Main
 end
@@ -895,7 +895,9 @@ if MOBILE then
 	mkPage("Buttons")
 	mkSBItem("Buttons", "grid", Pages["Buttons"], 9)
 end
-do
+-- Desktop sidebar furniture: inside the mobile tab STRIP this card renders as
+-- a squashed sliver at the end of the scroll and overlaps the sheet corner.
+if not MOBILE then
 	local card = Instance.new("Frame")
 	card.Name = "QuickStatus"; card.Parent = SB; card.LayoutOrder = 100
 	card.Size = UDim2.new(1, 0, 0, 94); card.BackgroundColor3 = T.Card; card.BorderSizePixel = 0
@@ -1143,10 +1145,11 @@ do
 	FloatHost.Parent = SG
 	FloatHost.BackgroundTransparency = 1
 	FloatHost.Size = UDim2.fromScale(1, 1)
-	-- ZIndex 0 puts the whole subtree UNDER the menu: an open menu must never be
-	-- covered by the buttons it spawned.
-	FloatHost.ZIndex = 0
+	-- Above the draggable HUD windows (ZIndex 851-866) or the buttons land
+	-- underneath them and become untappable; below the toast column (900).
+	FloatHost.ZIndex = 895
 	FloatHost.Visible = MOBILE
+	S._floatHost = FloatHost
 
 	local Buttons = {}
 	local spawnIndex = 0
@@ -2352,6 +2355,9 @@ local function setMenuOpen(open)
 	if menuAnimating or MenuOpen == open then return end
 	menuAnimating = true
 	MenuOpen = open
+	-- Floating buttons hide while the sheet is open: they are gameplay
+	-- controls, and stacked on top of the menu they just cover its rows.
+	if MOBILE and S._floatHost then S._floatHost.Visible = not open end
 	if open then
 		Main.Visible = true
 		if MOBILE then
@@ -2421,10 +2427,9 @@ do
 		local portrait = vp.Y >= vp.X
 
 		if MOBILE then
-			-- Portrait: a tall sheet with breathing room at the edges.
-			-- Landscape: narrower and near-full height — a full-width sheet there
-			-- is a wall of empty space with the controls stretched across it.
-			expandedSize = portrait and UDim2.fromScale(0.92, 0.82) or UDim2.fromScale(0.62, 0.92)
+			-- Portrait: a tall sheet. Landscape: WIDE and near-full height — a
+			-- narrow vertical sheet on a landscape phone wastes the whole screen.
+			expandedSize = portrait and UDim2.fromScale(0.92, 0.82) or UDim2.fromScale(0.74, 0.92)
 		else
 			WW = math.min(900, math.floor(vp.X - 40))
 			WH = math.min(580, math.floor(vp.Y - 40))

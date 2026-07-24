@@ -1065,10 +1065,10 @@ Shadow(Main, 0.2)
 local mainScale = Instance.new("UIScale"); mainScale.Parent = Main
 mainScale.Scale = 0.9
 if MOBILE then
-	-- Upper bound only: on a tablet the sheet stops growing and stays a phone-
-	-- shaped panel instead of a stretched desktop window.
+	-- Upper bound only, and wide enough for a landscape phone sheet — the old
+	-- 560 cap was what kept the menu a narrow vertical strip in landscape.
 	local limit = Instance.new("UISizeConstraint")
-	limit.MaxSize = Vector2.new(560, 940)
+	limit.MaxSize = Vector2.new(960, 940)
 	limit.MinSize = Vector2.new(260, 300)
 	limit.Parent = Main
 end
@@ -1212,6 +1212,9 @@ S._menuHome = UDim2.fromScale(0.5, 0.5)
 local function setMenuVisible(v)
 	if v == menuOpen and Main.Visible == v then return end
 	menuOpen = v
+	-- Floating buttons hide while the sheet is open: they are gameplay
+	-- controls, and under the sheet they'd eat its edge taps anyway.
+	if MOBILE and S._floatHost then S._floatHost.Visible = not v end
 	if v then
 		Main.Visible = true
 		if MOBILE then
@@ -2141,6 +2144,7 @@ do
 	-- must never be covered by the buttons it spawned.
 	FloatHost.ZIndex = 0
 	FloatHost.Visible = MOBILE
+	S._floatHost = FloatHost
 
 	local Buttons = {}
 	local spawnIndex = 0
@@ -2408,10 +2412,9 @@ do
 		local portrait = vp.Y >= vp.X
 
 		if MOBILE then
-			-- Portrait: a tall sheet with breathing room at the edges.
-			-- Landscape: narrower, near-full height — a full-width sheet in
-			-- landscape is a wall of empty space with the controls stretched out.
-			Main.Size = portrait and UDim2.fromScale(0.94, 0.8) or UDim2.fromScale(0.62, 0.92)
+			-- Portrait: a tall sheet. Landscape: WIDE and near-full height — a
+			-- narrow vertical sheet on a landscape phone wastes the whole screen.
+			Main.Size = portrait and UDim2.fromScale(0.94, 0.8) or UDim2.fromScale(0.74, 0.92)
 		else
 			WW = math.min(920, math.floor(vp.X - 40))
 			WH = math.min(590, math.floor(vp.Y - 40))

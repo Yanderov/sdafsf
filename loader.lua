@@ -97,7 +97,10 @@ local REPO = "https://raw.githubusercontent.com/Yanderov/lib/refs/heads/main/"
 -- silently resolves to nothing, which is why every icon used to render blank.
 local Games = {
 	{ name = "Murder Mystery 2", desc = "Innocent, Sheriff, Murderer", icon = 66654135, file = "mm2" },
-	{ name = "Demonology", desc = "Co-op ghost hunting", icon = 2548152021, file = "demonology" },
+	-- 6170143659 = universe of place 18199615050 ("Demonology🕯️" by Blaqk Magic
+	-- Blue). The old id pointed at a random user's empty starter place, which is
+	-- why this card showed the generic Roblox bridge screenshot.
+	{ name = "Demonology", desc = "Co-op ghost hunting", icon = 6170143659, file = "demonology" },
 	{ name = "Pressure", desc = "Hadal Blacksite, deep-sea horror", icon = 4367208330, file = "pressure" },
 }
 
@@ -264,8 +267,6 @@ for index, entry in ipairs(Games) do
 	corner(card, 14)
 	local cardStroke = stroke(card, 0.5)
 	grad(card, Color3.fromRGB(18, 18, 21), Color3.fromRGB(11, 11, 13))
-	local cardScale = Instance.new("UIScale")
-	cardScale.Parent = card
 
 	local icon = Instance.new("ImageLabel")
 	icon.Name = "Icon"
@@ -297,10 +298,11 @@ for index, entry in ipairs(Games) do
 	corner(play, 10)
 	local playStroke = stroke(play, 0.5)
 
+	-- No hover scale: a 1px UIStroke on a fractionally scaled frame rasterizes
+	-- crooked (uneven thickness around the corners). Color/stroke feedback only.
 	local function hover(on)
 		tween(card, 0.14, { BackgroundColor3 = on and T.Elev or T.Card }):Play()
-		tween(cardStroke, 0.14, { Transparency = on and 0.2 or 0.5, Color = on and T.White or T.Border }):Play()
-		tween(cardScale, 0.16, { Scale = on and 1.015 or 1 }):Play()
+		tween(cardStroke, 0.14, { Transparency = on and 0.25 or 0.5 }):Play()
 		tween(play, 0.14, { BackgroundColor3 = on and T.White or T.Elev }):Play()
 		play.TextColor3 = on and T.BG or T.Text
 		tween(playStroke, 0.14, { Transparency = on and 1 or 0.5 }):Play()

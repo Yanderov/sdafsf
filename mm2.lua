@@ -1254,6 +1254,9 @@ local function setMenuVisible(v)
         return
     end
     S._menuWantOpen = v
+    -- Floating buttons hide while the sheet is open: they are gameplay
+    -- controls, and stacked on top of the menu they just cover its rows.
+    if S._floatHost then S._floatHost.Visible = not v end
     if v then
         Main.Visible = true
         Main.Position = (S._islandPoint and S._islandPoint()) or UDim2.new(0.5, 0, 0, 34)
@@ -1358,7 +1361,9 @@ local function mkWinBtn(txt, xOff)
     return b
 end
 local CloseBtn = mkWinBtn("×", MOBILE and -14 or -10)
-local MinBtn = mkWinBtn("—", MOBILE and -60 or -40)
+-- Mobile: the slot opens Settings, so it must LOOK like settings — keeping the
+-- "—" glyph made it read as minimize and surprised everyone who tapped it.
+local MinBtn = mkWinBtn(MOBILE and "\u{2699}" or "—", MOBILE and -60 or -40)
 -- ===== Feature search =====
 local UIRegistry = {}
 -- ===== Config system: each toggle/slider/cycle registers a get/set here =====
@@ -2491,10 +2496,13 @@ do
     FloatHost.Parent = SG
     FloatHost.BackgroundTransparency = 1
     FloatHost.Size = UDim2.fromScale(1, 1)
-    -- ZIndex 0 keeps the whole subtree UNDER the menu: an open menu must never
-    -- be covered by the buttons it spawned.
-    FloatHost.ZIndex = 0
-    FloatHost.Visible = MOBILE
+    -- Above the draggable HUD windows (ZIndex 851-866) or the buttons land
+    -- underneath them and become untappable; below the settings modal (999).
+    FloatHost.ZIndex = 900
+    -- mm2's menu starts OPEN, and the buttons hide while the sheet is open
+    -- (setMenuVisible keeps this in sync from here on).
+    FloatHost.Visible = MOBILE and not Main.Visible
+    S._floatHost = FloatHost
 
     local Buttons = {}
     local Entries = {}
@@ -7189,10 +7197,13 @@ end
 do
     local sec = mkSection(Pages.Misc, "HUD Elements", 11)
     S._RegisterMiscSection(sec, "Utility")
-    mkToggle(sec, "Keybind HUD", false, function(v)
-        S.HUD_Keybinds = v
-        S._SetHUDVisible(HUDEls["Keybinds"], v)
-    end, 2)
+    -- Keybinds don't exist on the touch build, so neither does their HUD toggle.
+    if not MOBILE then
+        mkToggle(sec, "Keybind HUD", false, function(v)
+            S.HUD_Keybinds = v
+            S._SetHUDVisible(HUDEls["Keybinds"], v)
+        end, 2)
+    end
     mkToggle(sec, "Gun Status", false, function(v)
         S.HUD_GunStatus = v
         S._SetHUDVisible(HUDEls["Gun Status"], v)
@@ -8822,7 +8833,11 @@ local function applyConfig(data)
             local el = HUDEls[name]
             if el and type(h) == "table" then
                 pcall(function()
-                    if name ~= "Pinned Emotes" then el.frame.Visible = (h.v == true) end
+                    -- Keybinds don't exist on the touch build, so a desktop
+                    -- config must not be able to resurrect their HUD there.
+                    if name ~= "Pinned Emotes" and not (MOBILE and name == "Keybinds") then
+                        el.frame.Visible = (h.v == true)
+                    end
                     local p = h.p
                     local xs, xo = p and tonumber(p.xs), p and tonumber(p.xo)
                     local ys, yo = p and tonumber(p.ys), p and tonumber(p.yo)
@@ -9584,9 +9599,9 @@ do
         if not vp or vp.X < 1 or vp.Y < 1 then return end
         local portrait = vp.Y >= vp.X
         if MOBILE then
-            -- Portrait: a tall sheet with breathing room. Landscape: narrower and
-            -- near-full height, since a full-width sheet there is mostly padding.
-            WW = math.floor(math.clamp(vp.X * (portrait and 0.94 or 0.64), 260, 620))
+            -- Portrait: a tall sheet. Landscape: WIDE and near-full height — a
+            -- narrow vertical sheet on a landscape phone wastes the whole screen.
+            WW = math.floor(math.clamp(vp.X * (portrait and 0.94 or 0.74), 260, portrait and 620 or 960))
             WH = math.floor(math.clamp(vp.Y * (portrait and 0.82 or 0.92), 300, 940))
         else
             WW = math.max(560, math.min(980, math.floor(vp.X - 36)))
