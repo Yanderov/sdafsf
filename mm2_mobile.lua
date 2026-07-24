@@ -6511,9 +6511,10 @@ local function attachHUDDrag(frame, handle)
     local stroke = frame:FindFirstChildOfClass("UIStroke")
     local restStrokeTransparency = stroke and stroke.Transparency or 0.24
     local function dragVisual(active)
-        TweenService:Create(scale, TweenInfo.new(active and 0.14 or 0.2, active and Enum.EasingStyle.Quad or Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-            Scale = active and 1.018 or 1
-        }):Play()
+        -- Drag scale removed to prevent lag
+        -- TweenService:Create(scale, TweenInfo.new(active and 0.14 or 0.2, active and Enum.EasingStyle.Quad or Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        --             Scale = active and 1.018 or 1
+        --         }):Play()
         if stroke then
             TweenService:Create(stroke, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
                 Color = active and T.Accent or T.Bd2,
@@ -6534,9 +6535,15 @@ local function attachHUDDrag(frame, handle)
             dragVisual(true)
         end
     end)
-    tc(UIS.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement and dragStart and startPos then
-            local delta = input.Position - dragStart
+    local currentDragInput = nil
+    dragHandle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            currentDragInput = input
+        end
+    end)
+    tc(game:GetService("RunService").RenderStepped:Connect(function()
+        if dragging and currentDragInput and dragStart and startPos then
+            local delta = currentDragInput.Position - dragStart
             frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
     end))

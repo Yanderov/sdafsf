@@ -662,9 +662,9 @@ makeElementDraggable = function(frame, handle)
 			dragInput = input
 		end
 	end)
-	tc(UIS.InputChanged:Connect(function(input)
-		if input == dragInput and dragging then
-			local delta = input.Position - dragStart
+	tc(game:GetService("RunService").RenderStepped:Connect(function()
+		if dragging and dragInput then
+			local delta = dragInput.Position - dragStart
 			frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
 		end
 	end))
