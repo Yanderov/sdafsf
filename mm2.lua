@@ -1217,8 +1217,8 @@ local M = MOBILE and {
 local viewport = (workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize) or Vector2.new(1280, 720)
 -- Mobile is Scale-driven (see the responsive block further down); the desktop
 -- numbers stay clamped to the monitor as before.
-local WW = MOBILE and math.floor(viewport.X * 0.86) or math.max(560, math.min(980, math.floor(viewport.X - 36)))
-local WH = MOBILE and math.floor(viewport.Y * 0.78) or math.max(430, math.min(640, math.floor(viewport.Y - 56)))
+local WW = MOBILE and math.min(math.floor(viewport.X * 0.95), 480) or math.max(560, math.min(980, math.floor(viewport.X - 36)))
+local WH = MOBILE and math.min(math.floor(viewport.Y * 0.9), 320) or math.max(430, math.min(640, math.floor(viewport.Y - 56)))
 local expandedSize = UDim2.fromOffset(WW, WH)
 Main = Instance.new("Frame")
 Main.Name = "Main"
@@ -1260,7 +1260,8 @@ local function setMenuVisible(v)
         S._menuHome = Main.Position
         local target = (S._islandPoint and S._islandPoint()) or UDim2.new(0.5, 0, 0, 34)
         TweenService.Create(TweenService, Main, TweenInfo.new(0.26, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = target }):Play()
-        -- Scale tween removed for performance
+        TweenService:Create(menuScale, TweenInfo.new(0.26, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Scale = 0.05 }):Play()
+        task.wait(0.26)
         task.delay(0.27, function()
             -- Reopened mid-animation? The open path already re-tweened it; hiding
             -- now would swallow the window the user just asked for.
@@ -1352,8 +1353,17 @@ local function mkWinBtn(txt, xOff)
     return b
 end
 local CloseBtn = mkWinBtn("×", MOBILE and -14 or -10)
-local SetBtn = mkWinBtn("\u2699", MOBILE and -106 or -70)
+local SetBtn = mkWinBtn("", MOBILE and -106 or -70)
 SetBtn.Visible = MOBILE
+local SetAvatar = Instance.new("ImageLabel")
+SetAvatar.Parent = SetBtn; SetAvatar.Size = UDim2.fromScale(1, 1)
+SetAvatar.BackgroundTransparency = 1; SetAvatar.BorderSizePixel = 0
+SetAvatar.Image = "rbxasset://textures/ui/Guidetool/PlayerIcon.png"
+task.spawn(function()
+    local ok, img = pcall(function() return game:GetService("Players"):GetUserThumbnailAsync(game:GetService("Players").LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48) end)
+    if ok and img and img ~= "" and SetAvatar.Parent then SetAvatar.Image = img end
+end)
+local uiCorner = Instance.new("UICorner"); uiCorner.CornerRadius = UDim.new(1, 0); uiCorner.Parent = SetAvatar
 local MinBtn = mkWinBtn("-", MOBILE and -60 or -40)
 -- ===== Feature search =====
 local UIRegistry = {}

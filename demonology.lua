@@ -632,8 +632,17 @@ local CloseBtn = mkWinBtn("X", MOBILE and -14 or -12)
 -- Desktop: minimize.  Mobile: minimize is pointless on a sheet you close
 -- outright, so the slot becomes the Interface button — the profile card that
 -- opened it lives in the desktop sidebar, which mobile drops.
-local SetBtn = mkWinBtn("\u2699", MOBILE and -106 or -70)
+local SetBtn = mkWinBtn("", MOBILE and -106 or -70)
 SetBtn.Visible = MOBILE
+local SetAvatar = Instance.new("ImageLabel")
+SetAvatar.Parent = SetBtn; SetAvatar.Size = UDim2.fromScale(1, 1)
+SetAvatar.BackgroundTransparency = 1; SetAvatar.BorderSizePixel = 0
+SetAvatar.Image = "rbxasset://textures/ui/Guidetool/PlayerIcon.png"
+task.spawn(function()
+    local ok, img = pcall(function() return game:GetService("Players"):GetUserThumbnailAsync(game:GetService("Players").LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48) end)
+    if ok and img and img ~= "" and SetAvatar.Parent then SetAvatar.Image = img end
+end)
+local uiCorner = Instance.new("UICorner"); uiCorner.CornerRadius = UDim.new(1, 0); uiCorner.Parent = SetAvatar
 local MinBtn = mkWinBtn("-", MOBILE and -60 or -46)
 
 -- Drag Utility
@@ -642,7 +651,7 @@ makeElementDraggable = function(frame, handle)
 	local dragging, dragInput, dragStart, startPos
 	handle.InputBegan:Connect(function(input)
 		if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) and frame.Active then
-			if frame == Main or frame.Name == "Watermark" or (not hudLocked) then
+			if frame == Main or string.find(frame.Name, "Watermark") or (not hudLocked) then
 				dragging = true
 				dragStart = input.Position
 				startPos = frame.Position

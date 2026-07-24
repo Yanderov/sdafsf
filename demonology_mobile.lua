@@ -647,7 +647,7 @@ makeElementDraggable = function(frame, handle)
 	local dragging, dragInput, dragStart, startPos
 	handle.InputBegan:Connect(function(input)
 		if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) and frame.Active then
-			if frame == Main or frame.Name == "Watermark" or (not hudLocked) then
+			if frame == Main or string.find(frame.Name, "Watermark") or (not hudLocked) then
 				dragging = true
 				dragStart = input.Position
 				startPos = frame.Position

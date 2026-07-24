@@ -1221,8 +1221,8 @@ local M = MOBILE and {
 local viewport = (workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize) or Vector2.new(1280, 720)
 -- Mobile is Scale-driven (see the responsive block further down); the desktop
 -- numbers stay clamped to the monitor as before.
-local WW = MOBILE and math.floor(viewport.X * 0.86) or math.max(560, math.min(980, math.floor(viewport.X - 36)))
-local WH = MOBILE and math.floor(viewport.Y * 0.78) or math.max(430, math.min(640, math.floor(viewport.Y - 56)))
+local WW = MOBILE and math.min(math.floor(viewport.X * 0.95), 480) or math.max(560, math.min(980, math.floor(viewport.X - 36)))
+local WH = MOBILE and math.min(math.floor(viewport.Y * 0.9), 320) or math.max(430, math.min(640, math.floor(viewport.Y - 56)))
 local expandedSize = UDim2.fromOffset(WW, WH)
 Main = Instance.new("Frame")
 Main.Name = "Main"
