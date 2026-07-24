@@ -10,6 +10,37 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local plr = PS.LocalPlayer
 local MenuKeybind = Enum.KeyCode.Insert
 
+--=====================================================================
+--// BUILD MODE (PC / MOBILE)
+--=====================================================================
+-- The launcher's PC/MOBILE switch sets _G.INERTIA_MOBILE before running this
+-- file, and that flag always wins: auto-detect alone is wrong on tablets with a
+-- keyboard, on emulators and on touchscreen PCs.  Without a launcher we fall
+-- back to "touch, no keyboard".
+local MOBILE = _G.INERTIA_MOBILE
+if MOBILE == nil then MOBILE = UIS.TouchEnabled and not UIS.KeyboardEnabled end
+MOBILE = MOBILE == true
+
+-- Every measurement that has to differ between a mouse pointer and a fingertip
+-- lives here, so the layout code below stays ONE code path instead of two
+-- parallel UIs.  Touch targets follow the 44px minimum.  Window sizes are Scale
+-- based on mobile (see relayout), never fixed pixels.
+local M = MOBILE and {
+	rowH = 48, rowFont = 15, rowGap = 10,
+	trackW = 54, trackH = 30, knob = 24,
+	sliderH = 70, barH = 12, grab = 22,
+	btnH = 50, cycleW = 132, cycleH = 36,
+	titleH = 62, navH = 68, navItemW = 92,
+	sectionPad = 12,
+} or {
+	rowH = 36, rowFont = 14, rowGap = 8,
+	trackW = 46, trackH = 24, knob = 18,
+	sliderH = 48, barH = 6, grab = 16,
+	btnH = 38, cycleW = 130, cycleH = 26,
+	titleH = 48, navH = 34, navItemW = 0,
+	sectionPad = 16,
+}
+
 local function Events()
 	return ReplicatedStorage:WaitForChild("Events")
 end
@@ -434,7 +465,7 @@ local function Notify(title, msg, tone, dur)
 	toast.BorderSizePixel = 0
 	toast.ClipsDescendants = true
 	toast.LayoutOrder = NOrder
-	toast.Size = UDim2.new(0, 310, 0, 0)
+	toast.Size = UDim2.new(0.86, 0, 0, 0)
 	toast.ZIndex = 901
 	Corner(toast, 12)
 	local tst = Stroke(toast, T.Bd2, 1, 0.5)
@@ -489,7 +520,7 @@ local function Notify(title, msg, tone, dur)
 	end
 
 	TweenService:Create(toast, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-		Size = UDim2.new(0, 310, 0, 52)
+		Size = UDim2.new(1, 0, 0, MOBILE and 58 or 52)
 	}):Play()
 	TweenService:Create(sc, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 	TweenService:Create(tt, TweenInfo.new(0.14), { TextTransparency = 0 }):Play()
@@ -502,7 +533,7 @@ local function Notify(title, msg, tone, dur)
 		TweenService:Create(tst, TweenInfo.new(0.18), { Transparency = 1 }):Play()
 		TweenService:Create(toast, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
 			BackgroundTransparency = 1,
-			Size = UDim2.new(0, 310, 0, 0)
+			Size = UDim2.new(0.86, 0, 0, 0)
 		}):Play()
 		task.wait(0.24)
 		for i, v in ipairs(ActiveN) do
@@ -515,9 +546,11 @@ local function NotifyToggle(label, enabled)
 	Notify(label, enabled and "Enabled" or "Disabled", enabled and "success" or "muted", 1.8)
 end
 
--- Main Window Shell Setup
+-- Main Window Shell Setup.  WW/WH is the DESKTOP design size; the mobile build
+-- never uses a pixel size — expandedSize is Scale-based and recomputed by
+-- relayout() on every viewport/orientation change.
 local WW, WH = 900, 580
-local expandedSize = UDim2.fromOffset(WW, WH)
+local expandedSize = MOBILE and UDim2.fromScale(0.92, 0.84) or UDim2.fromOffset(WW, WH)
 Main = Instance.new("Frame")
 Main.Name = "Main"
 Main.Parent = SG
@@ -529,17 +562,25 @@ Main.Position = UDim2.fromScale(0.5, 0.5)
 Main.Size = UDim2.fromOffset(0, 0)
 Main.ClipsDescendants = true
 Main.Visible = false
-Corner(Main, 14)
+Corner(Main, MOBILE and 18 or 14)
 local mainSt = Stroke(Main, T.Bd, 1, 0.1)
 Shadow(Main, 0.15)
 Grad(Main, T.White:Lerp(T.Accent, 0.10), T.White:Lerp(T.Elev, 0.06), 90)
+if MOBILE then
+	-- Upper bound only: on a tablet the sheet stops growing instead of turning
+	-- into a stretched desktop window.
+	local limit = Instance.new("UISizeConstraint")
+	limit.MaxSize = Vector2.new(560, 940)
+	limit.MinSize = Vector2.new(260, 300)
+	limit.Parent = Main
+end
 
 local TBar = Instance.new("Frame")
 TBar.Name = "TBar"
 TBar.Parent = Main
 TBar.Active = true
 TBar.BackgroundTransparency = 1
-TBar.Size = UDim2.new(1, 0, 0, 48)
+TBar.Size = UDim2.new(1, 0, 0, M.titleH)
 TBar.Position = UDim2.new(0, 0, 0, 0)
 
 local TIcon = Instance.new("Frame")
@@ -566,11 +607,11 @@ local function mkWinBtn(txt, xOff)
 	b.Parent = TBar
 	b.AnchorPoint = Vector2.new(1, 0.5)
 	b.Position = UDim2.new(1, xOff, 0.5, 0)
-	b.Size = UDim2.new(0, 30, 0, 26)
+	b.Size = MOBILE and UDim2.new(0, 40, 0, 40) or UDim2.new(0, 30, 0, 26)
 	b.BackgroundColor3 = T.Elev
 	b.BorderSizePixel = 0
 	b.Font = FB
-	b.TextSize = 14
+	b.TextSize = MOBILE and 17 or 14
 	b.Text = txt
 	b.TextColor3 = T.Tx2
 	b.AutoButtonColor = false
@@ -586,8 +627,11 @@ local function mkWinBtn(txt, xOff)
 	end)
 	return b
 end
-local CloseBtn = mkWinBtn("X", -12)
-local MinBtn = mkWinBtn("-", -46)
+local CloseBtn = mkWinBtn("X", MOBILE and -14 or -12)
+-- Desktop: minimize.  Mobile: minimize is pointless on a sheet you close
+-- outright, so the slot becomes the Interface button — the profile card that
+-- opened it lives in the desktop sidebar, which mobile drops.
+local MinBtn = mkWinBtn(MOBILE and "\u{2699}" or "-", MOBILE and -60 or -46)
 
 -- Drag Utility
 makeElementDraggable = function(frame, handle)
@@ -625,19 +669,31 @@ end
 
 makeElementDraggable(Main, TBar)
 
+-- Navigation.  Desktop = vertical sidebar.  Mobile = bottom tab bar, the layout
+-- every phone app uses, horizontally scrollable so the tab count can grow past
+-- what fits.  Same instance, different axis: one set of tab buttons downstream.
 local SB = Instance.new("ScrollingFrame")
 SB.Name = "Sidebar"
 SB.Parent = Main
 SB.BackgroundColor3 = T.Sidebar
 SB.BorderSizePixel = 0
-SB.Position = UDim2.new(0, 8, 0, 48)
-SB.Size = UDim2.new(0, 144, 1, -56)
 SB.CanvasSize = UDim2.new(0, 0, 0, 0)
-SB.AutomaticCanvasSize = Enum.AutomaticSize.Y
-SB.ScrollBarThickness = 2
 SB.ScrollBarImageColor3 = T.Tx3
 SB.ScrollBarImageTransparency = 0.5
-Corner(SB, 10)
+if MOBILE then
+	SB.AnchorPoint = Vector2.new(0.5, 1)
+	SB.Position = UDim2.new(0.5, 0, 1, -8)
+	SB.Size = UDim2.new(1, -16, 0, M.navH)
+	SB.AutomaticCanvasSize = Enum.AutomaticSize.X
+	SB.ScrollingDirection = Enum.ScrollingDirection.X
+	SB.ScrollBarThickness = 0
+else
+	SB.Position = UDim2.new(0, 8, 0, M.titleH)
+	SB.Size = UDim2.new(0, 144, 1, -56)
+	SB.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	SB.ScrollBarThickness = 2
+end
+Corner(SB, MOBILE and 16 or 10)
 Stroke(SB, T.Bd2, 1, 0.32)
 local SBLine = Instance.new("Frame")
 SBLine.Parent = Main
@@ -646,13 +702,21 @@ SBLine.BackgroundTransparency = 0.3
 SBLine.BorderSizePixel = 0
 SBLine.Position = UDim2.new(0, 157, 0, 56)
 SBLine.Size = UDim2.new(0, 1, 1, -72)
+SBLine.Visible = not MOBILE
 local SBLayout = Instance.new("UIListLayout")
 SBLayout.Parent = SB
 SBLayout.SortOrder = Enum.SortOrder.LayoutOrder
-SBLayout.Padding = UDim.new(0, 5)
-Pad(SB, 8, 8, 8, 8)
+SBLayout.FillDirection = MOBILE and Enum.FillDirection.Horizontal or Enum.FillDirection.Vertical
+-- Centering is for the mobile strip only; the desktop list must stay top-aligned
+-- or the profile card and tabs drift to the middle of the sidebar.
+SBLayout.VerticalAlignment = MOBILE and Enum.VerticalAlignment.Center or Enum.VerticalAlignment.Top
+SBLayout.Padding = UDim.new(0, MOBILE and 6 or 5)
+Pad(SB, MOBILE and 6 or 8, MOBILE and 6 or 8, 8, 8)
 
-do
+-- The profile card is desktop sidebar furniture: a bottom tab bar has room for
+-- tabs and nothing else, so mobile reaches Interface settings through the
+-- header gear instead.
+if not MOBILE then
 local ProfileButton = Instance.new("TextButton")
 ProfileButton.Name = "Profile"; ProfileButton.Parent = SB; ProfileButton.LayoutOrder = -100
 ProfileButton.Size = UDim2.new(1, 0, 0, 54); ProfileButton.BackgroundColor3 = T.Card
@@ -696,11 +760,12 @@ ContentArea.Name = "Content"
 ContentArea.Parent = Main
 ContentArea.BackgroundTransparency = 1
 ContentArea.BorderSizePixel = 0
-ContentArea.Position = UDim2.new(0, 164, 0, 48)
-ContentArea.Size = UDim2.new(1, -172, 1, -48)
+-- Mobile gets the full width (no sidebar to clear); the tab bar below navigates.
+ContentArea.Position = MOBILE and UDim2.new(0, 6, 0, M.titleH) or UDim2.new(0, 164, 0, 48)
+ContentArea.Size = MOBILE and UDim2.new(1, -12, 1, -(M.titleH + M.navH + 8)) or UDim2.new(1, -172, 1, -48)
 ContentArea.CanvasSize = UDim2.new(0, 0, 0, 0)
 ContentArea.AutomaticCanvasSize = Enum.AutomaticSize.Y
-ContentArea.ScrollBarThickness = 3
+ContentArea.ScrollBarThickness = MOBILE and 0 or 3
 ContentArea.ScrollBarImageColor3 = T.Tx3
 ContentArea.ScrollBarImageTransparency = 0.4
 
@@ -720,8 +785,8 @@ local function mkPage(name)
 	local l = Instance.new("UIListLayout")
 	l.Parent = sf
 	l.SortOrder = Enum.SortOrder.LayoutOrder
-	l.Padding = UDim.new(0, 14)
-	Pad(sf, 10, 14, 8, 10)
+	l.Padding = UDim.new(0, MOBILE and 14 or 14)
+	Pad(sf, MOBILE and 8 or 10, MOBILE and 20 or 14, MOBILE and 6 or 8, MOBILE and 6 or 10)
 	Pages[name] = sf
 	return sf
 end
@@ -731,30 +796,38 @@ local function mkSBItem(name, iconKind, page, order)
 	btn.Name = name
 	btn.Parent = SB
 	btn.LayoutOrder = order
-	btn.Size = UDim2.new(1, 0, 0, 34)
+	-- Offset height, not Scale: inside a ScrollingFrame a Scale height measures
+	-- the frame, not the padded content box, so a Scale=1 pill would overflow
+	-- the tab bar by exactly the padding and drag the canvas with it.
+	btn.Size = MOBILE and UDim2.new(0, M.navItemW, 0, M.navH - 12) or UDim2.new(1, 0, 0, 34)
 	btn.AutoButtonColor = false
 	btn.BackgroundTransparency = 1
 	btn.BorderSizePixel = 0
 	btn.Text = ""
-	Corner(btn, 9)
+	Corner(btn, MOBILE and 12 or 9)
 	local bar = Instance.new("Frame")
 	bar.Parent = btn
-	bar.Size = UDim2.new(0, 3, 0, 20)
-	bar.Position = UDim2.new(0, 0, 0.5, -10)
+	-- Active marker: a left rail on desktop, an underline on a mobile pill.
+	bar.Size = MOBILE and UDim2.new(0, 22, 0, 3) or UDim2.new(0, 3, 0, 20)
+	bar.Position = MOBILE and UDim2.new(0.5, -11, 1, -6) or UDim2.new(0, 0, 0.5, -10)
 	bar.BackgroundColor3 = T.Accent
 	bar.BorderSizePixel = 0
 	bar.Visible = false
 	Corner(bar, 2)
-	local icon = MakeNavIcon(btn, iconKind)
+	-- Mobile: text-only pills.  The nav icons are a fixed embedded set, so any
+	-- tab without one would render icon-less next to its neighbours; a uniform
+	-- text strip has no such hole.
+	local icon = not MOBILE and MakeNavIcon(btn, iconKind) or nil
 	local label = Instance.new("TextLabel")
 	label.Parent = btn
 	label.BackgroundTransparency = 1
-	label.Position = UDim2.new(0, icon and 36 or 13, 0, 0)
-	label.Size = UDim2.new(1, icon and -42 or -20, 1, 0)
+	label.Position = MOBILE and UDim2.new(0, 3, 0, 0) or UDim2.new(0, icon and 36 or 13, 0, 0)
+	label.Size = MOBILE and UDim2.new(1, -6, 1, -6) or UDim2.new(1, icon and -42 or -20, 1, 0)
 	label.Font = F
-	label.TextSize = 13
+	label.TextSize = MOBILE and 13 or 13
 	label.TextColor3 = T.Tx2
-	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.TextXAlignment = MOBILE and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left
+	label.TextWrapped = MOBILE
 	label.TextTruncate = Enum.TextTruncate.AtEnd
 	label.Text = name
 	local item = { btn = btn, bar = bar, icon = icon, label = label, page = page }
@@ -812,6 +885,12 @@ mkSBItem("Movement", "footprints", Pages["Movement"], 5)
 mkSBItem("Teleport", "map-pin", Pages["Teleport"], 6)
 mkSBItem("Misc", "wrench", Pages["Misc"], 7)
 mkSBItem("HUD", "panels-top-left", Pages["HUD"], 8)
+-- Floating buttons are a touch feature, so the tab that manages them only
+-- exists on the mobile build.
+if MOBILE then
+	mkPage("Buttons")
+	mkSBItem("Buttons", "grid", Pages["Buttons"], 9)
+end
 do
 	local card = Instance.new("Frame")
 	card.Name = "QuickStatus"; card.Parent = SB; card.LayoutOrder = 100
@@ -1030,6 +1109,7 @@ tc(UIS.InputBegan:Connect(function(input, processed)
 		end
 		return
 	end
+	if MOBILE then return end
 	if input.UserInputType == Enum.UserInputType.Keyboard then
 		local typing = false
 		pcall(function() typing = (UIS:GetFocusedTextBox() ~= nil) end)
@@ -1039,6 +1119,309 @@ tc(UIS.InputBegan:Connect(function(input, processed)
 		end
 	end
 end))
+
+--=====================================================================
+--// FLOATING BUTTONS (mobile build only)
+--=====================================================================
+-- One draggable on-screen button per function, spawned from the "BTN" chip on
+-- the function's row or from the Buttons tab.  Tap = fire the same trigger the
+-- desktop keybind fires; drag = move it; the position is saved as SCALE, so a
+-- layout survives a re-inject, a rotation and a different phone.
+--
+-- Controls register themselves through S._floatRegister, which is the same
+-- callback the keybind entry already carries — nothing is declared twice and
+-- the two builds cannot drift apart.
+local FloatReg = {}
+local FloatPos = {}
+do
+	local FloatHost = Instance.new("Frame")
+	FloatHost.Name = "FloatingButtons"
+	FloatHost.Parent = SG
+	FloatHost.BackgroundTransparency = 1
+	FloatHost.Size = UDim2.fromScale(1, 1)
+	-- ZIndex 0 puts the whole subtree UNDER the menu: an open menu must never be
+	-- covered by the buttons it spawned.
+	FloatHost.ZIndex = 0
+	FloatHost.Visible = MOBILE
+
+	local Buttons = {}
+	local spawnIndex = 0
+
+	local function buttonSize()
+		local camera = workspace.CurrentCamera
+		local vp = camera and camera.ViewportSize
+		local base = vp and math.min(vp.X, vp.Y) or 400
+		return math.clamp(math.floor(base * 0.15), 54, 82)
+	end
+
+	S._floatRegister = function(id, label, trigger, isActive)
+		FloatReg[id] = { label = label, trigger = trigger, isActive = isActive, paintChips = {} }
+		return id
+	end
+
+	local function repaintChips(id)
+		local entry = FloatReg[id]
+		if not entry then return end
+		for _, paint in ipairs(entry.paintChips) do pcall(paint) end
+	end
+
+	S._floatIsOn = function(id) return Buttons[id] ~= nil end
+
+	local function paintState(id)
+		local button = Buttons[id]
+		if not button then return end
+		local entry = FloatReg[id]
+		local active = false
+		if entry and entry.isActive then
+			local ok, value = pcall(entry.isActive)
+			active = ok and value == true
+		end
+		if button.lastActive == active then return end
+		button.lastActive = active
+		TweenService:Create(button.frame, TweenInfo.new(0.16), {
+			BackgroundColor3 = active and T.ActiveBg or T.Card,
+		}):Play()
+		TweenService:Create(button.stroke, TweenInfo.new(0.16), {
+			Color = active and T.Accent or T.Bd2,
+			Transparency = active and 0.05 or 0.3,
+		}):Play()
+		button.dot.BackgroundColor3 = active and T.Accent or T.Tx4
+		button.dot.BackgroundTransparency = active and 0 or 0.4
+		button.label.TextColor3 = active and T.White or T.Tx2
+	end
+
+	local function createButton(id)
+		local entry = FloatReg[id]
+		if not entry or Buttons[id] then return end
+		local size = buttonSize()
+
+		local saved = FloatPos[id]
+		if type(saved) ~= "table" or type(saved.x) ~= "number" or type(saved.y) ~= "number" then
+			-- Fresh buttons stack down the left edge instead of landing on top of
+			-- each other; the user drags them wherever they want.
+			spawnIndex = spawnIndex + 1
+			saved = { x = 0.08, y = math.min(0.22 + (spawnIndex - 1) * 0.12, 0.9) }
+			FloatPos[id] = saved
+		end
+
+		local frame = Instance.new("TextButton")
+		frame.Name = "Float_" .. id
+		frame.Parent = FloatHost
+		frame.AnchorPoint = Vector2.new(0.5, 0.5)
+		frame.Position = UDim2.fromScale(math.clamp(saved.x, 0.03, 0.97), math.clamp(saved.y, 0.05, 0.95))
+		frame.Size = UDim2.fromOffset(size, size)
+		frame.BackgroundColor3 = T.Card
+		frame.BackgroundTransparency = 0.08
+		frame.BorderSizePixel = 0
+		frame.AutoButtonColor = false
+		frame.Text = ""
+		frame.Active = true
+		Corner(frame, math.floor(size * 0.3))
+		local stroke = Stroke(frame, T.Bd2, 1, 0.3)
+		Shadow(frame, 0.55)
+		Grad(frame, T.White:Lerp(T.Accent, 0.1), T.White:Lerp(T.Elev, 0.06), 90)
+
+		local dot = Instance.new("Frame")
+		dot.Parent = frame
+		dot.AnchorPoint = Vector2.new(0.5, 0)
+		dot.Position = UDim2.new(0.5, 0, 0, 9)
+		dot.Size = UDim2.fromOffset(7, 7)
+		dot.BackgroundColor3 = T.Tx4
+		dot.BorderSizePixel = 0
+		Corner(dot, 99)
+
+		local label = Instance.new("TextLabel")
+		label.Parent = frame
+		label.BackgroundTransparency = 1
+		label.Position = UDim2.new(0, 4, 0, 20)
+		label.Size = UDim2.new(1, -8, 1, -26)
+		label.Font = FM
+		label.TextSize = size <= 60 and 11 or 12
+		label.TextColor3 = T.Tx2
+		label.TextWrapped = true
+		label.TextXAlignment = Enum.TextXAlignment.Center
+		label.TextYAlignment = Enum.TextYAlignment.Center
+		label.Text = string.upper(tostring(entry.label or id))
+
+		local scale = Instance.new("UIScale")
+		scale.Parent = frame
+		scale.Scale = 0.6
+		TweenService:Create(scale, TweenInfo.new(0.24, Enum.EasingStyle.Back), { Scale = 1 }):Play()
+
+		local record = { frame = frame, stroke = stroke, dot = dot, label = label, scale = scale }
+		Buttons[id] = record
+
+		-- Drag vs tap: anything under 8px of travel is a tap.  Without the
+		-- threshold every tap that wobbles a pixel would move the button and
+		-- never fire, which is the usual "my button does nothing" bug on touch.
+		local pressPos, dragging, moveConn, endConn
+		local function finish()
+			if moveConn then moveConn:Disconnect(); moveConn = nil end
+			if endConn then endConn:Disconnect(); endConn = nil end
+			if not dragging then
+				local current = FloatReg[id]
+				if current and current.trigger then pcall(current.trigger) end
+				TweenService:Create(scale, TweenInfo.new(0.09), { Scale = 0.9 }):Play()
+				task.delay(0.09, function()
+					if frame.Parent then
+						TweenService:Create(scale, TweenInfo.new(0.14, Enum.EasingStyle.Back), { Scale = 1 }):Play()
+					end
+				end)
+				task.defer(function() paintState(id) end)
+			else
+				local camera = workspace.CurrentCamera
+				local vp = camera and camera.ViewportSize
+				if vp and vp.X > 0 and vp.Y > 0 then
+					local centre = frame.AbsolutePosition + frame.AbsoluteSize / 2
+					FloatPos[id] = {
+						x = math.clamp(centre.X / vp.X, 0.03, 0.97),
+						y = math.clamp(centre.Y / vp.Y, 0.05, 0.95),
+					}
+					if S._RequestAutoSave then S._RequestAutoSave() end
+				end
+			end
+			pressPos, dragging = nil, false
+		end
+
+		tc(frame.InputBegan:Connect(function(input)
+			if input.UserInputType ~= Enum.UserInputType.Touch
+				and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+			-- A second finger landing on the same button would otherwise orphan
+			-- the first press's connections, leaking one per multi-touch.
+			if moveConn then moveConn:Disconnect(); moveConn = nil end
+			if endConn then endConn:Disconnect(); endConn = nil end
+			pressPos, dragging = input.Position, false
+			local startCentre = frame.AbsolutePosition + frame.AbsoluteSize / 2
+			moveConn = UIS.InputChanged:Connect(function(moved)
+				if not pressPos then return end
+				if moved.UserInputType ~= Enum.UserInputType.Touch
+					and moved.UserInputType ~= Enum.UserInputType.MouseMovement then return end
+				local delta = moved.Position - pressPos
+				if not dragging and (math.abs(delta.X) > 8 or math.abs(delta.Y) > 8) then dragging = true end
+				if dragging then
+					local camera = workspace.CurrentCamera
+					local vp = camera and camera.ViewportSize
+					if not vp or vp.X <= 0 or vp.Y <= 0 then return end
+					frame.Position = UDim2.fromScale(
+						math.clamp((startCentre.X + delta.X) / vp.X, 0.03, 0.97),
+						math.clamp((startCentre.Y + delta.Y) / vp.Y, 0.05, 0.95)
+					)
+				end
+			end)
+			endConn = input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then finish() end
+			end)
+		end))
+
+		record.lastActive = nil
+		paintState(id)
+	end
+
+	local function destroyButton(id)
+		local button = Buttons[id]
+		if not button then return end
+		Buttons[id] = nil
+		TweenService:Create(button.scale, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Scale = 0.5 }):Play()
+		TweenService:Create(button.frame, TweenInfo.new(0.14), { BackgroundTransparency = 1 }):Play()
+		task.delay(0.16, function() if button.frame.Parent then button.frame:Destroy() end end)
+	end
+
+	S._floatSet = function(id, on)
+		if not MOBILE then return end
+		-- The menu button is permanent: on a device with no keyboard, removing it
+		-- would leave no way to reopen the hub.
+		if id == "ui:menu" and not on then return end
+		if on then
+			createButton(id)
+		else
+			destroyButton(id)
+			FloatPos[id] = nil
+			if S._RequestAutoSave then S._RequestAutoSave() end
+		end
+		repaintChips(id)
+		if S._refreshFloatTab then pcall(S._refreshFloatTab) end
+	end
+
+	S._floatToggle = function(id) S._floatSet(id, not S._floatIsOn(id)) end
+
+	-- Config restore hands us the whole saved layout at once.
+	S._floatApplyMap = function(map)
+		if not MOBILE then return end
+		local keepMenu = FloatPos["ui:menu"]
+		for id in pairs(Buttons) do destroyButton(id) end
+		FloatPos = {}
+		if type(map) == "table" then
+			for id, pos in pairs(map) do
+				if type(pos) == "table" and FloatReg[id] then
+					FloatPos[id] = { x = tonumber(pos.x) or 0.08, y = tonumber(pos.y) or 0.3 }
+					createButton(id)
+				end
+			end
+		end
+		-- A config saved before the menu button existed must not strand the user
+		-- without a way back into the hub.
+		if FloatReg["ui:menu"] then
+			if not FloatPos["ui:menu"] then FloatPos["ui:menu"] = keepMenu end
+			createButton("ui:menu")
+		end
+		for id in pairs(FloatReg) do repaintChips(id) end
+		if S._refreshFloatTab then pcall(S._refreshFloatTab) end
+	end
+	S._floatGetMap = function() return FloatPos end
+	S._floatClearAll = function()
+		for id in pairs(Buttons) do S._floatSet(id, false) end
+	end
+
+	-- The chip that sits at the right edge of a control row on mobile.
+	S._floatChip = function(parent, id, rightOffset)
+		local chip = Instance.new("TextButton")
+		chip.Name = "Float_" .. id
+		chip.Parent = parent
+		chip.AnchorPoint = Vector2.new(1, 0.5)
+		chip.Position = UDim2.new(1, rightOffset, 0.5, 0)
+		chip.Size = UDim2.fromOffset(46, 30)
+		chip.BackgroundColor3 = T.Elev
+		chip.BorderSizePixel = 0
+		chip.AutoButtonColor = false
+		chip.Font = FM
+		chip.TextSize = 11
+		chip.TextColor3 = T.Tx2
+		chip.Text = "BTN"
+		chip.ZIndex = 3
+		Corner(chip, 8)
+		local chipStroke = Stroke(chip, T.Bd2, 1, 0.42)
+		local function paint()
+			local on = S._floatIsOn(id)
+			chip.BackgroundColor3 = on and T.ActiveBg or T.Elev
+			chip.TextColor3 = on and T.White or T.Tx2
+			chipStroke.Color = on and T.Accent or T.Bd2
+			chipStroke.Transparency = on and 0.15 or 0.42
+		end
+		local entry = FloatReg[id]
+		if entry then table.insert(entry.paintChips, paint) end
+		chip.MouseButton1Click:Connect(function() S._floatToggle(id); paint() end)
+		paint()
+		return chip
+	end
+
+	-- Active-state dots: a cheap poll over the handful of live buttons rather
+	-- than a per-frame loop over the whole registry.
+	if MOBILE then
+		task.spawn(function()
+			while FloatHost.Parent do
+				for id in pairs(Buttons) do paintState(id) end
+				task.wait(0.35)
+			end
+		end)
+		tc(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+			local size = buttonSize()
+			for _, button in pairs(Buttons) do
+				button.frame.Size = UDim2.fromOffset(size, size)
+				button.label.TextSize = size <= 60 and 11 or 12
+			end
+		end))
+	end
+end
 
 local function mkSection(parent, title, order)
 	local card = Instance.new("Frame")
@@ -1058,11 +1441,11 @@ local function mkSection(parent, title, order)
 	inner.BackgroundTransparency = 1
 	inner.Size = UDim2.new(1, 0, 0, 0)
 	inner.AutomaticSize = Enum.AutomaticSize.Y
-	Pad(inner, 14, 16, 16, 16)
+	Pad(inner, MOBILE and 12 or 14, M.sectionPad, M.sectionPad, M.sectionPad)
 	local layout = Instance.new("UIListLayout")
 	layout.Parent = inner
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Padding = UDim.new(0, 8)
+	layout.Padding = UDim.new(0, M.rowGap)
 	local hdrRow = Instance.new("Frame")
 	hdrRow.Parent = inner
 	hdrRow.LayoutOrder = 0
@@ -1190,7 +1573,7 @@ local function mkToggle(parent, label, default, callback, order, noPersistState,
 	row.Name = label
 	row.Parent = parent
 	row.LayoutOrder = order
-	row.Size = UDim2.new(1, 0, 0, 36)
+	row.Size = UDim2.new(1, 0, 0, M.rowH)
 	row.BackgroundTransparency = 1
 	row.BorderSizePixel = 0
 	row.Active = true
@@ -1199,9 +1582,10 @@ local function mkToggle(parent, label, default, callback, order, noPersistState,
 	lbl.Parent = row
 	lbl.BackgroundTransparency = 1
 	lbl.Position = UDim2.new(0, 8, 0, 0)
-	lbl.Size = UDim2.new(1, -104, 1, 0)
+	-- Reserve the switch plus the chip beside it, whichever build we're on.
+	lbl.Size = UDim2.new(1, -(M.trackW + (MOBILE and 74 or 58)), 1, 0)
 	lbl.Font = F
-	lbl.TextSize = 14
+	lbl.TextSize = M.rowFont
 	lbl.TextColor3 = T.Tx2
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
 	lbl.TextTruncate = Enum.TextTruncate.AtEnd
@@ -1222,29 +1606,32 @@ local function mkToggle(parent, label, default, callback, order, noPersistState,
 	Corner(badge, 4)
 	Stroke(badge, T.Bd2, 1, 0.5)
 	Pad(badge, 0, 0, 7, 7)
+	local knobInset = math.floor((M.trackH - M.knob) / 2)
 	local track = Instance.new("TextButton")
 	track.Parent = row
 	track.AnchorPoint = Vector2.new(1, 0.5)
 	track.Position = UDim2.new(1, -8, 0.5, 0)
-	track.Size = UDim2.new(0, 46, 0, 24)
+	track.Size = UDim2.new(0, M.trackW, 0, M.trackH)
 	track.BackgroundColor3 = T.TgOff
 	track.BorderSizePixel = 0
 	track.Text = ""
 	track.AutoButtonColor = false
-	Corner(track, 12)
+	Corner(track, math.floor(M.trackH / 2))
 	local trackSt = Stroke(track, T.Bd2, 1, 0.6)
 	local knob = Instance.new("Frame")
 	knob.Parent = track
-	knob.Size = UDim2.new(0, 18, 0, 18)
-	knob.Position = UDim2.new(0, 3, 0.5, -9)
+	knob.Size = UDim2.new(0, M.knob, 0, M.knob)
+	knob.Position = UDim2.new(0, knobInset, 0.5, -math.floor(M.knob / 2))
 	knob.BackgroundColor3 = T.KnobOff
 	knob.BorderSizePixel = 0
-	Corner(knob, 9)
+	Corner(knob, math.floor(M.knob / 2))
 	local state = default and true or false
 	local function setVis(on, anim)
 		local tCol = on and T.TgOn or T.TgOff
 		local kCol = on and T.KnobOn or T.KnobOff
-		local kPos = on and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)
+		local kPos = on
+			and UDim2.new(1, -(M.knob + knobInset), 0.5, -math.floor(M.knob / 2))
+			or UDim2.new(0, knobInset, 0.5, -math.floor(M.knob / 2))
 		lbl.TextColor3 = on and T.Tx or T.Tx2
 		trackSt.Transparency = on and 1 or 0.6
 		if anim then
@@ -1283,12 +1670,15 @@ local function mkToggle(parent, label, default, callback, order, noPersistState,
 		TweenService:Create(row, TweenInfo.new(0.12), { BackgroundTransparency = 1 }):Play()
 	end)
 
-	local entry = { label = label, bindKey = defaultBind, trigger = toggle }
-	if defaultBind then
+	-- Keybinds are a DESKTOP-only control surface; on mobile the same trigger is
+	-- reached through a floating on-screen button instead, registered here so
+	-- both builds share one definition of "what this control does".
+	local entry = { label = label, bindKey = not MOBILE and defaultBind or nil, trigger = toggle }
+	if defaultBind and not MOBILE then
 		BindReg[defaultBind] = entry
 	end
 	function entry.updateVisuals()
-		if entry.bindKey then
+		if entry.bindKey and not MOBILE then
 			badge.Text = entry.bindKey.Name
 			badge.Visible = true
 		else
@@ -1296,16 +1686,22 @@ local function mkToggle(parent, label, default, callback, order, noPersistState,
 		end
 	end
 	entry.updateVisuals()
-	tc(UIS.InputBegan:Connect(function(i)
-		if i.UserInputType ~= Enum.UserInputType.MouseButton2 then return end
-		local pos, size = row.AbsolutePosition, row.AbsoluteSize
-		local mx, my = i.Position.X, i.Position.Y
-		if mx >= pos.X and mx <= pos.X + size.X and my >= pos.Y and my <= pos.Y + size.Y then
-			PendingBind = entry
-			badge.Text = "..."
-			badge.Visible = true
-		end
-	end))
+	if MOBILE then
+		local floatId = "toggle:" .. cfgId(parent, label)
+		S._floatRegister(floatId, label, toggle, function() return state end)
+		S._floatChip(row, floatId, -(M.trackW + 16))
+	else
+		tc(UIS.InputBegan:Connect(function(i)
+			if i.UserInputType ~= Enum.UserInputType.MouseButton2 then return end
+			local pos, size = row.AbsolutePosition, row.AbsoluteSize
+			local mx, my = i.Position.X, i.Position.Y
+			if mx >= pos.X and mx <= pos.X + size.X and my >= pos.Y and my <= pos.Y + size.Y then
+				PendingBind = entry
+				badge.Text = "..."
+				badge.Visible = true
+			end
+		end))
+	end
 
 	if not noPersistState then
 		table.insert(ConfigControls, {
@@ -1336,30 +1732,41 @@ local function mkAction(parent, label, callback, order)
 	btn.Name = label
 	btn.Parent = parent
 	btn.LayoutOrder = order
-	btn.Size = UDim2.new(1, 0, 0, 38)
+	btn.Size = UDim2.new(1, 0, 0, M.btnH)
 	btn.AutoButtonColor = false
 	btn.BackgroundColor3 = T.Elev
 	btn.BorderSizePixel = 0
 	btn.Font = FM
-	btn.TextSize = 14
+	btn.TextSize = M.rowFont
 	btn.TextColor3 = T.Tx
 	btn.Text = label
+	btn.TextTruncate = Enum.TextTruncate.AtEnd
 	Corner(btn, 8)
 	local bst = Stroke(btn, T.Bd2, 1, 0.4)
 
 	local entry = { label = label, bindKey = nil, trigger = callback }
 	function entry.updateVisuals()
-		btn.Text = label .. (entry.bindKey and ("   [ " .. entry.bindKey.Name .. " ]") or "")
+		btn.Text = label .. ((entry.bindKey and not MOBILE) and ("   [ " .. entry.bindKey.Name .. " ]") or "")
 	end
 	entry.updateVisuals()
 
 	btn.MouseButton1Click:Connect(function()
 		if not PendingBind then callback() end
 	end)
-	btn.MouseButton2Click:Connect(function()
-		PendingBind = entry
-		btn.Text = label .. "   [ ... ]"
-	end)
+	if MOBILE then
+		-- No right click on a touch screen: the row's chip spawns the on-screen
+		-- button for this action instead of asking for a key.
+		local floatId = "action:" .. cfgId(parent, label)
+		S._floatRegister(floatId, label, callback, nil)
+		S._floatChip(btn, floatId, -8)
+		Pad(btn, 0, 0, 12, 62)
+		btn.TextXAlignment = Enum.TextXAlignment.Left
+	else
+		btn.MouseButton2Click:Connect(function()
+			PendingBind = entry
+			btn.Text = label .. "   [ ... ]"
+		end)
+	end
 	btn.MouseEnter:Connect(function()
 		TweenService:Create(btn, TweenInfo.new(0.12), { BackgroundColor3 = T.Hover }):Play()
 		TweenService:Create(bst, TweenInfo.new(0.12), { Transparency = 0.1 }):Play()
@@ -1392,16 +1799,16 @@ local function mkSlider(parent, label, min, max, def, callback, order)
 	frame.Name = label
 	frame.Parent = parent
 	frame.LayoutOrder = order
-	frame.Size = UDim2.new(1, 0, 0, 48)
+	frame.Size = UDim2.new(1, 0, 0, M.sliderH)
 	frame.BackgroundTransparency = 1
 	frame.BorderSizePixel = 0
 	local lbl = Instance.new("TextLabel")
 	lbl.Parent = frame
 	lbl.BackgroundTransparency = 1
 	lbl.Position = UDim2.new(0, 4, 0, 0)
-	lbl.Size = UDim2.new(0.6, 0, 0, 20)
+	lbl.Size = UDim2.new(0.6, 0, 0, MOBILE and 24 or 20)
 	lbl.Font = F
-	lbl.TextSize = 13
+	lbl.TextSize = MOBILE and 15 or 13
 	lbl.TextColor3 = T.Tx2
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
 	lbl.Text = label
@@ -1410,33 +1817,34 @@ local function mkSlider(parent, label, min, max, def, callback, order)
 	vlbl.BackgroundTransparency = 1
 	vlbl.AnchorPoint = Vector2.new(1, 0)
 	vlbl.Position = UDim2.new(1, -4, 0, 0)
-	vlbl.Size = UDim2.new(0.35, 0, 0, 20)
+	vlbl.Size = UDim2.new(0.35, 0, 0, MOBILE and 24 or 20)
 	vlbl.Font = FM
-	vlbl.TextSize = 14
+	vlbl.TextSize = MOBILE and 15 or 14
 	vlbl.TextColor3 = T.White
 	vlbl.TextXAlignment = Enum.TextXAlignment.Right
 	local bar = Instance.new("Frame")
 	bar.Parent = frame
 	bar.AnchorPoint = Vector2.new(0.5, 0)
-	bar.Position = UDim2.new(0.5, 0, 0, 28)
-	bar.Size = UDim2.new(1, -12, 0, 6)
+	bar.Position = UDim2.new(0.5, 0, 0, MOBILE and 40 or 28)
+	bar.Size = UDim2.new(1, -12, 0, M.barH)
 	bar.BackgroundColor3 = T.TgOff
 	bar.BorderSizePixel = 0
-	Corner(bar, 3)
+	bar.Active = true
+	Corner(bar, math.floor(M.barH / 2))
 	local fill = Instance.new("Frame")
 	fill.Parent = bar
 	fill.Size = UDim2.new(0, 0, 1, 0)
 	fill.BackgroundColor3 = T.Accent
 	fill.BorderSizePixel = 0
-	Corner(fill, 3)
+	Corner(fill, math.floor(M.barH / 2))
 	local handle = Instance.new("Frame")
 	handle.Parent = bar
 	handle.AnchorPoint = Vector2.new(0.5, 0.5)
 	handle.Position = UDim2.new(0, 0, 0.5, 0)
-	handle.Size = UDim2.new(0, 16, 0, 16)
+	handle.Size = UDim2.new(0, M.grab, 0, M.grab)
 	handle.BackgroundColor3 = T.White
 	handle.BorderSizePixel = 0
-	Corner(handle, 8)
+	Corner(handle, math.floor(M.grab / 2))
 	Stroke(handle, T.BG, 2, 0)
 	local val = def
 	local function upd(v)
@@ -1459,19 +1867,28 @@ local function mkSlider(parent, label, min, max, def, callback, order)
 			if S._RequestAutoSave then S._RequestAutoSave() end
 		end
 	end
+	-- Touch counts as a drag here.  Matching only MouseButton1/MouseMovement (as
+	-- this did) makes every slider dead on a phone — you could see the bar but
+	-- never move it.  Freezing the page scroll for the drag is the other half:
+	-- a touch drag inside a ScrollingFrame scrolls the page as well.
 	frame.InputBegan:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1 then
+		if i.UserInputType == Enum.UserInputType.MouseButton1
+			or i.UserInputType == Enum.UserInputType.Touch then
 			active = true
+			ContentArea.ScrollingEnabled = false
 			fromMouse(i)
 		end
 	end)
 	tc(UIS.InputChanged:Connect(function(i)
-		if active and i.UserInputType == Enum.UserInputType.MouseMovement then
+		if active and (i.UserInputType == Enum.UserInputType.MouseMovement
+			or i.UserInputType == Enum.UserInputType.Touch) then
 			fromMouse(i)
 		end
 	end))
 	tc(UIS.InputEnded:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1 then
+		if i.UserInputType == Enum.UserInputType.MouseButton1
+			or i.UserInputType == Enum.UserInputType.Touch then
+			if active then ContentArea.ScrollingEnabled = true end
 			active = false
 		end
 	end))
@@ -1496,28 +1913,29 @@ local function mkCycle(parent, label, options, labels, default, callback, order)
 	row.Name = label
 	row.Parent = parent
 	row.LayoutOrder = order
-	row.Size = UDim2.new(1, 0, 0, 36)
+	row.Size = UDim2.new(1, 0, 0, M.rowH)
 	row.BackgroundTransparency = 1
 	local lbl = Instance.new("TextLabel")
 	lbl.Parent = row
 	lbl.BackgroundTransparency = 1
 	lbl.Position = UDim2.new(0, 8, 0, 0)
-	lbl.Size = UDim2.new(1, -146, 1, 0)
+	lbl.Size = UDim2.new(1, -(M.cycleW + 16), 1, 0)
 	lbl.Font = F
-	lbl.TextSize = 14
+	lbl.TextSize = M.rowFont
 	lbl.TextColor3 = T.Tx2
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.TextTruncate = Enum.TextTruncate.AtEnd
 	lbl.Text = label
 	local btn = Instance.new("TextButton")
 	btn.Parent = row
 	btn.AnchorPoint = Vector2.new(1, 0.5)
 	btn.Position = UDim2.new(1, -8, 0.5, 0)
-	btn.Size = UDim2.new(0, 130, 0, 26)
+	btn.Size = UDim2.new(0, M.cycleW, 0, M.cycleH)
 	btn.BackgroundColor3 = T.Elev
 	btn.BorderSizePixel = 0
 	btn.AutoButtonColor = false
 	btn.Font = FM
-	btn.TextSize = 13
+	btn.TextSize = MOBILE and 14 or 13
 	btn.TextColor3 = T.Tx
 	Corner(btn, 7)
 	Stroke(btn, T.Bd2, 1, 0.4)
@@ -1841,6 +2259,11 @@ end
 -- Window Controls (Minimize / Close)
 local minimized = false
 MinBtn.MouseButton1Click:Connect(function()
+	if MOBILE then
+		-- Same slot, different job on a phone: open Interface settings.
+		if openAppearance then openAppearance() end
+		return
+	end
 	minimized = not minimized
 	if minimized then
 		SB.Visible = false
@@ -1916,18 +2339,39 @@ local function setMenuOpen(open)
 	MenuOpen = open
 	if open then
 		Main.Visible = true
+		if MOBILE then
+			-- Droplet, outwards: the window is spat out of the Dynamic Island,
+			-- growing from a bead at the island back to where it was left.
+			Main.Position = S._islandPoint and S._islandPoint() or UDim2.new(0.5, 0, 0, 34)
+			Main.Size = UDim2.new(0, 0, 0, 0)
+			TweenService:Create(Main, TweenInfo.new(0.34, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+				Position = S._menuHome or UDim2.fromScale(0.5, 0.5)
+			}):Play()
+			if S._islandGulp then S._islandGulp(true) end
+		end
 		local tw = TweenService:Create(Main, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
 			Size = expandedSize
 		})
 		tw:Play()
 		tw.Completed:Wait()
 	else
+		if MOBILE then
+			-- Droplet, inwards: shrink and slide into the island, then hide.
+			S._menuHome = Main.Position
+			TweenService:Create(Main, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+				Position = S._islandPoint and S._islandPoint() or UDim2.new(0.5, 0, 0, 34)
+			}):Play()
+		end
 		local tw = TweenService:Create(Main, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
 			Size = UDim2.new(0, 0, 0, 0)
 		})
 		tw:Play()
 		tw.Completed:Wait()
 		Main.Visible = false
+		if MOBILE then
+			Main.Position = S._menuHome or UDim2.fromScale(0.5, 0.5)
+			if S._islandGulp then S._islandGulp(false) end
+		end
 		if mouseUnlockToggle then
 			mouseUnlockToggle.set(false, false)
 		else
@@ -1945,6 +2389,47 @@ tc(UIS.InputBegan:Connect(function(input)
 		setMenuOpen(not MenuOpen)
 	end
 end))
+
+--=====================================================================
+--// RESPONSIVE LAYOUT
+--=====================================================================
+-- Runs on every viewport change (resize, rotation, split view).  Nothing in the
+-- UI may assume a screen size: the desktop window shrinks to fit a small
+-- monitor, the mobile sheet re-proportions between portrait and landscape, and
+-- the toast column follows the screen instead of a fixed 360px.
+do
+	local function relayout()
+		local camera = workspace.CurrentCamera
+		local vp = camera and camera.ViewportSize
+		if not vp or vp.X < 1 or vp.Y < 1 then return end
+		local portrait = vp.Y >= vp.X
+
+		if MOBILE then
+			-- Portrait: a tall sheet with breathing room at the edges.
+			-- Landscape: narrower and near-full height — a full-width sheet there
+			-- is a wall of empty space with the controls stretched across it.
+			expandedSize = portrait and UDim2.fromScale(0.92, 0.82) or UDim2.fromScale(0.62, 0.92)
+		else
+			WW = math.min(900, math.floor(vp.X - 40))
+			WH = math.min(580, math.floor(vp.Y - 40))
+			expandedSize = UDim2.fromOffset(WW, WH)
+		end
+		-- Only resize a window that is actually open: writing Size while it is
+		-- closed would pop the collapsed (0,0) window back onto the screen.
+		if Main.Visible and not minimized then Main.Size = expandedSize end
+		NHost.Size = UDim2.fromOffset(math.clamp(math.floor(vp.X * 0.4), 220, 360), 240)
+	end
+	relayout()
+	local camera = workspace.CurrentCamera
+	if camera then tc(camera:GetPropertyChangedSignal("ViewportSize"):Connect(relayout)) end
+	tc(workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+		local newCamera = workspace.CurrentCamera
+		if newCamera then
+			relayout()
+			tc(newCamera:GetPropertyChangedSignal("ViewportSize"):Connect(relayout))
+		end
+	end))
+end
 
 -- Mouse Unlock overrides
 do
@@ -1966,9 +2451,7 @@ do
 		end
 	end
 	tc(RS.RenderStepped:Connect(forceMouseDefault))
-	tc(RS.Stepped:Connect(forceMouseDefault))
-	tc(RS.Heartbeat:Connect(forceMouseDefault))
-
+		
 	S.MouseUnlockCleanup = function()
 	end
 end
@@ -4063,7 +4546,9 @@ do
 	island.BackgroundColor3 = T.Sidebar
 	island.BackgroundTransparency = 0.008
 	island.BorderSizePixel = 0
-	island.Visible = false
+	-- On by default on mobile: it is that build's only always-on HUD, and the
+	-- menu animates in and out of it.
+	island.Visible = MOBILE
 	island.ZIndex = 864
 	Corner(island, 15)
 	Stroke(island, T.Bd2, 1, 0.18)
@@ -4134,10 +4619,38 @@ do
 	local iTime = islandMetric(303, 60, "TIME")
 	makeElementDraggable(island, island)
 	HUDEls["Watermark"] = { frame = island, content = island, setLocked = function(v) end }
-	mkToggle(panels, "Dynamic Island", false, function(v)
+	mkToggle(panels, "Dynamic Island", MOBILE, function(v)
 		island.Visible = v
 		NotifyToggle("Dynamic Island", v)
 	end, 8)
+
+	-- The mobile menu animates in and out of this bar like a droplet, so the
+	-- island publishes its own centre (in Scale, from the live AbsolutePosition
+	-- so HUD scale and screen size are already accounted for) and a squash it
+	-- plays when the window is swallowed or spat back out.
+	S._islandPoint = function()
+		local camera = workspace.CurrentCamera
+		local vp = camera and camera.ViewportSize
+		if not vp or vp.X <= 0 or vp.Y <= 0 or not island.Parent then
+			return UDim2.new(0.5, 0, 0, 34)
+		end
+		local centre = island.AbsolutePosition + island.AbsoluteSize / 2
+		return UDim2.fromScale(math.clamp(centre.X / vp.X, 0, 1), math.clamp(centre.Y / vp.Y, 0, 1))
+	end
+	S._islandGulp = function(outward)
+		if not island.Visible then return end
+		-- Read the target from S.HUDScale, not from the live UIScale: a gulp that
+		-- lands mid-tween would otherwise bake in a transient value.
+		local base = S.HUDScale
+		TweenService:Create(islandScale, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
+			Scale = base * (outward and 1.1 or 0.9),
+		}):Play()
+		task.delay(0.12, function()
+			if island.Parent then
+				TweenService:Create(islandScale, TweenInfo.new(0.22, Enum.EasingStyle.Back), { Scale = base }):Play()
+			end
+		end)
+	end
 	do
 		local islandStart = os.time()
 		local iframes, ielapsed, ifps = 0, 0, 0
@@ -4171,6 +4684,126 @@ do
 			end
 		end)
 	end
+end
+
+--=====================================================================
+--// TAB: BUTTONS (mobile) — the Floating Buttons manager
+--=====================================================================
+-- Built LAST on purpose: it lists every registered control, and that registry
+-- is only complete once every other tab has finished building.
+if MOBILE and Pages["Buttons"] then
+	-- The menu button drives the window itself rather than a game feature, and
+	-- it is the one button that cannot be removed: deleting it on a device with
+	-- no keyboard would leave no way to reopen the menu at all.
+	S._floatRegister("ui:menu", "Menu", function() setMenuOpen(not MenuOpen) end, function() return MenuOpen end)
+
+	local secFloat = mkSection(Pages["Buttons"], "Floating Buttons", 1)
+
+	local note = Instance.new("TextLabel")
+	note.Parent = secFloat
+	note.LayoutOrder = 1
+	note.BackgroundTransparency = 1
+	note.Size = UDim2.new(1, 0, 0, 40)
+	note.Font = F
+	note.TextSize = 12
+	note.TextColor3 = T.Tx3
+	note.TextXAlignment = Enum.TextXAlignment.Left
+	note.TextWrapped = true
+	note.Text = "Вынеси функцию на экран — кнопку можно перетащить пальцем, позиция сохраняется."
+
+	local paints = {}
+	local order = {}
+	for id, entry in pairs(FloatReg) do
+		table.insert(order, { id = id, label = tostring(entry.label or id) })
+	end
+	-- Menu first, then alphabetical: the one permanent button stays at the top.
+	table.sort(order, function(a, b)
+		if (a.id == "ui:menu") ~= (b.id == "ui:menu") then return a.id == "ui:menu" end
+		return string.lower(a.label) < string.lower(b.label)
+	end)
+
+	local function mkPill(parent, text, x)
+		local pill = Instance.new("TextButton")
+		pill.Parent = parent
+		pill.AnchorPoint = Vector2.new(1, 0.5)
+		pill.Position = UDim2.new(1, x, 0.5, 0)
+		pill.Size = UDim2.fromOffset(74, 32)
+		pill.BackgroundColor3 = T.Elev
+		pill.BorderSizePixel = 0
+		pill.AutoButtonColor = false
+		pill.Font = FM
+		pill.TextSize = 11
+		pill.TextColor3 = T.Tx2
+		pill.Text = text
+		pill.ZIndex = 3
+		Corner(pill, 9)
+		return pill, Stroke(pill, T.Bd2, 1, 0.42)
+	end
+
+	for index, item in ipairs(order) do
+		local row = Instance.new("Frame")
+		row.Name = item.id
+		row.Parent = secFloat
+		row.LayoutOrder = index + 1
+		row.Size = UDim2.new(1, 0, 0, M.rowH)
+		row.BackgroundTransparency = 1
+
+		local label = Instance.new("TextLabel")
+		label.Parent = row
+		label.BackgroundTransparency = 1
+		label.Position = UDim2.new(0, 6, 0, 0)
+		label.Size = UDim2.new(1, -170, 1, 0)
+		label.Font = F
+		label.TextSize = M.rowFont
+		label.TextColor3 = T.Tx2
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.TextTruncate = Enum.TextTruncate.AtEnd
+		label.Text = item.label
+
+		local enable, enableStroke = mkPill(row, "ENABLE", -82)
+		local remove, removeStroke = mkPill(row, "REMOVE", -4)
+
+		local locked = item.id == "ui:menu"
+		local function paint()
+			local on = S._floatIsOn(item.id)
+			enable.BackgroundColor3 = on and T.ActiveBg or T.Elev
+			enable.TextColor3 = on and T.White or T.Tx2
+			enable.Text = on and "ON SCREEN" or "ENABLE"
+			enableStroke.Color = on and T.Accent or T.Bd2
+			enableStroke.Transparency = on and 0.15 or 0.42
+			label.TextColor3 = on and T.Tx or T.Tx2
+			remove.Visible = not locked
+			remove.TextColor3 = on and T.Tx or T.Tx4
+			removeStroke.Transparency = on and 0.35 or 0.6
+		end
+		paints[item.id] = paint
+		enable.MouseButton1Click:Connect(function() S._floatSet(item.id, true) end)
+		remove.MouseButton1Click:Connect(function()
+			if not locked then S._floatSet(item.id, false) end
+		end)
+		paint()
+	end
+
+	local clearAll = mkAction(secFloat, "Remove All Buttons", function()
+		if S._floatClearAll then S._floatClearAll() end
+		Notify("Buttons", "All floating buttons removed", "info", 2)
+	end, #order + 2)
+	clearAll.Name = "RemoveAllFloating"
+
+	S._refreshFloatTab = function()
+		for _, paint in pairs(paints) do pcall(paint) end
+	end
+
+	-- Layout persistence rides the existing config system: one more entry in
+	-- ConfigControls, saved and restored exactly like every toggle.
+	table.insert(ConfigControls, {
+		id = "#floatbuttons",
+		get = function() return S._floatGetMap() end,
+		set = function(v) if type(v) == "table" then S._floatApplyMap(v) end end,
+	})
+
+	-- The menu button exists from the first frame, before any config has loaded.
+	S._floatSet("ui:menu", true)
 end
 
 -- Config callbacks can depend on round-only folders. Restore them away from
