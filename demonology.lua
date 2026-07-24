@@ -2213,6 +2213,42 @@ do
 		end)
 	end
 
+	table.insert(ConfigControls, {
+		id = "#HUDPositions",
+		get = function()
+			local pos = {}
+			for name, el in pairs(HUDEls) do
+				local p = el.frame.Position
+				pos[name] = { xs = p.X.Scale, xo = p.X.Offset, ys = p.Y.Scale, yo = p.Y.Offset }
+			end
+			return pos
+		end,
+		set = function(v)
+			if type(v) ~= "table" then return end
+			for name, p in pairs(v) do
+				local el = HUDEls[name]
+				if el and type(p) == "table" and p.xs and p.xo and p.ys and p.yo then
+					local xs, xo, ys, yo = tonumber(p.xs), tonumber(p.xo), tonumber(p.ys), tonumber(p.yo)
+					if xs and xo and ys and yo then
+						local vp = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize
+						if vp and vp.X > 0 and vp.Y > 0 then
+							local fs = el.frame.AbsoluteSize
+							local w = math.max(fs.X, 20)
+							local hgt = math.max(fs.Y, 20)
+							local anchorX = el.frame.AnchorPoint.X * w
+							local anchorY = el.frame.AnchorPoint.Y * hgt
+							local absX = math.clamp(vp.X * xs + xo - anchorX, -math.max(w - 20, 0), vp.X - 20)
+							local absY = math.clamp(vp.Y * ys + yo - anchorY, -math.max(hgt - 20, 0), vp.Y - 20)
+							xo = absX + anchorX - vp.X * xs
+							yo = absY + anchorY - vp.Y * ys
+						end
+						el.frame.Position = UDim2.new(xs, xo, ys, yo)
+					end
+				end
+			end
+		end,
+	})
+
 	local function SaveConfig()
 		if not writefile then return end
 		local data = {}
