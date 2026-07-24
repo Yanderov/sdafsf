@@ -4192,3 +4192,178 @@ task.spawn(function()
 		end
 	end
 end)
+
+-- ===================== MOBILE BUILD =====================
+-- Touch devices have no keyboard, so this build replaces every keybind with an
+-- on-screen control:
+--   * a draggable launcher button toggles the menu (tap), because the keyboard
+--     toggle key can never fire on a phone;
+--   * a long-press opens a quick panel that turns every registered bindable
+--     action into a button calling exactly the same function the key used to.
+-- Nothing else about the script changes. Wrapped in an immediately-invoked
+-- function so these locals get their own register scope -- a plain do-block
+-- would still count against the chunk's 200-local budget, which mm2 sits near.
+;(function()
+	local MobileUIS = game:GetService("UserInputService")
+
+	local function collectActions()
+		local list = {}
+		for _, e in pairs(BindReg) do
+			if type(e) == "table" and e.trigger then
+				table.insert(list, { label = tostring(e.label or "Action"), trigger = e.trigger })
+			end
+		end
+		table.sort(list, function(a, b) return string.lower(a.label) < string.lower(b.label) end)
+		return list
+	end
+
+	local launcher = Instance.new("TextButton")
+	launcher.Name = "MobileLauncher"
+	launcher.Parent = SG
+	launcher.Active = true
+	launcher.AnchorPoint = Vector2.new(0, 0.5)
+	launcher.Position = UDim2.new(0, 12, 0.42, 0)
+	launcher.Size = UDim2.fromOffset(54, 54)
+	launcher.BackgroundColor3 = T.Card
+	launcher.BackgroundTransparency = 0.02
+	launcher.BorderSizePixel = 0
+	launcher.AutoButtonColor = false
+	launcher.Font = FB
+	launcher.TextSize = 11
+	launcher.TextColor3 = T.White
+	launcher.Text = "MENU"
+	launcher.ZIndex = 900
+	Corner(launcher, 27)
+	Stroke(launcher, T.Bd2, 1, 0.2)
+
+	local panel = Instance.new("Frame")
+	panel.Name = "MobileQuickPanel"
+	panel.Parent = SG
+	panel.AnchorPoint = Vector2.new(0, 0.5)
+	panel.Position = UDim2.new(0, 74, 0.5, 0)
+	panel.Size = UDim2.fromOffset(214, 306)
+	panel.BackgroundColor3 = T.Card
+	panel.BackgroundTransparency = 0.02
+	panel.BorderSizePixel = 0
+	panel.Visible = false
+	panel.ZIndex = 900
+	Corner(panel, 12)
+	Stroke(panel, T.Bd2, 1, 0.2)
+
+	local panelHead = Instance.new("TextLabel")
+	panelHead.Parent = panel
+	panelHead.BackgroundTransparency = 1
+	panelHead.Position = UDim2.fromOffset(12, 0)
+	panelHead.Size = UDim2.new(1, -24, 0, 30)
+	panelHead.Font = FB
+	panelHead.TextSize = 11
+	panelHead.TextColor3 = T.Tx2
+	panelHead.TextXAlignment = Enum.TextXAlignment.Left
+	panelHead.Text = "QUICK ACTIONS"
+	panelHead.ZIndex = 901
+
+	local scroll = Instance.new("ScrollingFrame")
+	scroll.Parent = panel
+	scroll.Position = UDim2.fromOffset(8, 32)
+	scroll.Size = UDim2.new(1, -16, 1, -40)
+	scroll.BackgroundTransparency = 1
+	scroll.BorderSizePixel = 0
+	scroll.ScrollBarThickness = 3
+	scroll.CanvasSize = UDim2.new()
+	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	scroll.ScrollingDirection = Enum.ScrollingDirection.Y
+	scroll.ZIndex = 901
+	local layout = Instance.new("UIListLayout")
+	layout.Parent = scroll
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, 6)
+
+	local built = false
+	local function buildPanel()
+		if built then return end
+		built = true
+		local actions = collectActions()
+		if #actions == 0 then
+			local empty = Instance.new("TextLabel")
+			empty.Parent = scroll
+			empty.BackgroundTransparency = 1
+			empty.Size = UDim2.new(1, -4, 0, 30)
+			empty.Font = FM
+			empty.TextSize = 12
+			empty.TextColor3 = T.Tx4
+			empty.Text = "No bindable actions"
+			empty.ZIndex = 902
+			return
+		end
+		for index, action in ipairs(actions) do
+			local row = Instance.new("TextButton")
+			row.Parent = scroll
+			row.LayoutOrder = index
+			row.Size = UDim2.new(1, -4, 0, 34)
+			row.BackgroundColor3 = T.Elev
+			row.BackgroundTransparency = 0.1
+			row.BorderSizePixel = 0
+			row.AutoButtonColor = false
+			row.Font = FM
+			row.TextSize = 12
+			row.TextColor3 = T.Tx
+			row.TextXAlignment = Enum.TextXAlignment.Left
+			row.Text = "   " .. action.label
+			row.TextTruncate = Enum.TextTruncate.AtEnd
+			row.ZIndex = 902
+			Corner(row, 8)
+			local dot = Instance.new("Frame")
+			dot.Parent = row
+			dot.AnchorPoint = Vector2.new(1, 0.5)
+			dot.Position = UDim2.new(1, -9, 0.5, 0)
+			dot.Size = UDim2.fromOffset(7, 7)
+			dot.BackgroundColor3 = T.Tx4
+			dot.BorderSizePixel = 0
+			dot.Visible = action.isOn ~= nil
+			dot.ZIndex = 903
+			Corner(dot, 4)
+			local function refresh()
+				if not action.isOn then return end
+				local ok, value = pcall(action.isOn)
+				dot.BackgroundColor3 = (ok and value == true) and T.Accent or T.Tx4
+			end
+			refresh()
+			row.MouseButton1Click:Connect(function()
+				pcall(action.trigger)
+				task.defer(refresh)
+			end)
+		end
+	end
+
+	-- One input pipeline for the launcher: tap = menu, long-press = quick panel,
+	-- drag = move. Adding MouseButton1Click as well would double-fire on a tap.
+	local pressAt, pressPos, dragging = nil, nil, false
+	launcher.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+			pressAt, pressPos, dragging = tick(), input.Position, false
+		end
+	end)
+	MobileUIS.InputChanged:Connect(function(input)
+		if not pressPos then return end
+		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
+			local delta = input.Position - pressPos
+			if math.abs(delta.X) > 6 or math.abs(delta.Y) > 6 then
+				dragging = true
+				launcher.Position = UDim2.new(0, launcher.AbsolutePosition.X + delta.X, 0, launcher.AbsolutePosition.Y + delta.Y + launcher.AbsoluteSize.Y / 2)
+				pressPos = input.Position
+			end
+		end
+	end)
+	MobileUIS.InputEnded:Connect(function(input)
+		if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+		if pressAt and not dragging then
+			if tick() - pressAt >= 0.45 then
+				buildPanel()
+				panel.Visible = not panel.Visible
+			elseif Main then
+				Main.Visible = not Main.Visible
+			end
+		end
+		pressAt, pressPos, dragging = nil, nil, false
+	end)
+end)()
