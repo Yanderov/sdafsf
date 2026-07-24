@@ -336,8 +336,8 @@ NHost.Parent = SG
 NHost.AnchorPoint = Vector2.new(0.5, 0)
 NHost.BackgroundTransparency = 1
 NHost.BorderSizePixel = 0
-NHost.Position = UDim2.new(0.5, 0, 0.04, 0)
-NHost.Size = UDim2.new(0, 360, 0, 240)
+NHost.Position = MOBILE and UDim2.new(0.5, 0, 0.08, 0) or UDim2.new(0.5, 0, 0.04, 0)
+NHost.Size = MOBILE and UDim2.new(0, 260, 0, 240) or UDim2.new(0, 360, 0, 240)
 NHost.ZIndex = 900
 local nLayout = Instance.new("UIListLayout")
 nLayout.Parent = NHost
@@ -473,7 +473,7 @@ local function Notify(title, msg, tone, dur)
 	Grad(toast, T.White:Lerp(T.Accent, 0.12), T.White:Lerp(T.Elev, 0.08), 90)
 
 	local sc = Instance.new("UIScale")
-	sc.Scale = 0.9
+	sc.Scale = MOBILE and 0.75 or 0.9
 	sc.Parent = toast
 
 	local strip = Instance.new("Frame")
@@ -2306,12 +2306,8 @@ end
 
 -- Window Controls (Minimize / Close)
 local minimized = false
+SetBtn.MouseButton1Click:Connect(function() if openAppearance then openAppearance() end end)
 MinBtn.MouseButton1Click:Connect(function()
-	if MOBILE then
-		-- Same slot, different job on a phone: open Interface settings.
-		if openAppearance then openAppearance() end
-		return
-	end
 	minimized = not minimized
 	if minimized then
 		SB.Visible = false
@@ -2387,19 +2383,17 @@ local function setMenuOpen(open)
 	MenuOpen = open
 	if open then
 		Main.Visible = true
+		if not Main:FindFirstChild("MenuScale") then
+			local ms = Instance.new("UIScale", Main)
+			ms.Name = "MenuScale"
+			ms.Scale = 0.05
+		end
+		Main.Size = expandedSize
 		if MOBILE then
-			-- Droplet, outwards: the window is spat out of the Dynamic Island,
-			-- growing from a bead at the island back to where it was left.
-			Main.Position = S._islandPoint and S._islandPoint() or UDim2.new(0.5, 0, 0, 34)
-			Main.Size = UDim2.new(0, 0, 0, 0)
-			TweenService:Create(Main, TweenInfo.new(0.34, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-				Position = S._menuHome or UDim2.fromScale(0.5, 0.5)
-			}):Play()
+			Main.Position = S._menuHome or UDim2.fromScale(0.5, 0.5)
 			if S._islandGulp then S._islandGulp(true) end
 		end
-		local tw = TweenService:Create(Main, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-			Size = expandedSize
-		})
+		local tw = TweenService:Create(Main.MenuScale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 })
 		tw:Play()
 		tw.Completed:Wait()
 	else
@@ -4585,6 +4579,8 @@ do
 	local island = Instance.new("Frame")
 	island.Name = "HUD_Watermark"
 	island.Parent = SG
+	local wScale = Instance.new("UIScale", island)
+	wScale.Scale = 0.85
 	island:SetAttribute("ScalableHUD", true)
 	island.Active = true
 	island.AnchorPoint = Vector2.new(0.5, 0)

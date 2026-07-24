@@ -936,7 +936,7 @@ local function Notify(title, msg, dur, tone)
 	bar.ZIndex = 902
 	Corner(bar, 2)
 
-	local sc = Instance.new("UIScale"); sc.Scale = 0.9; sc.Parent = toast
+	local sc = Instance.new("UIScale"); sc.Scale = MOBILE and 0.75 or 0.9; sc.Parent = toast
 
 	local tt = Instance.new("TextLabel")
 	tt.Parent = toast; tt.BackgroundTransparency = 1; tt.Font = FB
