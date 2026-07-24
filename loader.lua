@@ -33,17 +33,17 @@ if not parentGui then parentGui = LocalPlayer:WaitForChild("PlayerGui") end
 destroyOld(parentGui)
 
 local T = {
-	BG = Color3.fromRGB(9, 9, 10),
-	Card = Color3.fromRGB(17, 17, 19),
-	Elev = Color3.fromRGB(25, 25, 28),
-	Hover = Color3.fromRGB(34, 34, 38),
-	Border = Color3.fromRGB(44, 44, 49),
+	BG = Color3.fromRGB(5, 5, 5),
+	Card = Color3.fromRGB(10, 10, 11),
+	Elev = Color3.fromRGB(15, 15, 17),
+	Hover = Color3.fromRGB(24, 24, 28),
+	Border = Color3.fromRGB(25, 25, 30),
 	White = Color3.fromRGB(255, 255, 255),
-	Text = Color3.fromRGB(236, 236, 238),
-	Dim = Color3.fromRGB(126, 126, 133),
-	Faint = Color3.fromRGB(86, 86, 92),
-	Good = Color3.fromRGB(126, 214, 156),
-	Bad = Color3.fromRGB(228, 100, 100),
+	Text = Color3.fromRGB(245, 245, 245),
+	Dim = Color3.fromRGB(140, 140, 145),
+	Faint = Color3.fromRGB(90, 90, 95),
+	Good = Color3.fromRGB(120, 220, 150),
+	Bad = Color3.fromRGB(240, 90, 90),
 }
 
 local function corner(object, radius)
@@ -241,7 +241,7 @@ for index, entry in ipairs(Games) do
 	icon.Parent = card
 	icon.BackgroundColor3 = T.Elev
 	icon.BorderSizePixel = 0
-	icon.Image = "rbxthumb://type=GameIcon&id=" .. tostring(entry.icon) .. "&w=420&h=420"
+	icon.Image = "rbxthumb://type=GameIcon&id=" .. tostring(entry.icon) .. "&w=150&h=150"
 	icon.ScaleType = Enum.ScaleType.Crop
 	corner(icon, 12)
 	stroke(icon, 0.6)
@@ -352,7 +352,7 @@ end
 
 setLoading = function(entry, status, failed)
 	Overlay.Visible = true
-	OverlayIcon.Image = "rbxthumb://type=GameIcon&id=" .. tostring(entry.icon) .. "&w=420&h=420"
+	OverlayIcon.Image = "rbxthumb://type=GameIcon&id=" .. tostring(entry.icon) .. "&w=150&h=150"
 	OverlayName.Text = entry.name
 	OverlayStatus.Text = status
 	OverlayStatus.TextColor3 = failed and T.Bad or T.Dim
@@ -381,8 +381,9 @@ local function fit()
 
 	local width, height
 	if MOBILE then
-		width = math.clamp(vp.X * (portrait and 0.92 or 0.6), 260, 460)
-		height = math.clamp(vp.Y * (portrait and 0.62 or 0.88), 280, 560)
+		width = math.clamp(vp.X * (portrait and 0.92 or 0.6), 260, 420)
+		local contentHeight = 58 + (#Cards * 84) + 16 + ((#Cards - 1) * 10)
+		height = math.min(contentHeight, math.floor(vp.Y * 0.9))
 	else
 		width = math.clamp(vp.X - 80, 380, 620)
 		height = math.clamp(vp.Y - 80, 260, 380)
