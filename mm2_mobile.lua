@@ -6953,6 +6953,23 @@ local function mkWatermark()
     attachHUDDrag(f)
     HUDEls["Watermark"] = { frame = f, content = f }
 
+	local islandTapStart
+	f.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			islandTapStart = input.Position
+		end
+	end)
+	f.InputEnded:Connect(function(input)
+		if islandTapStart and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = (input.Position - islandTapStart).Magnitude
+			if delta < 10 then
+				S._SetMenuVisible(not Main.Visible)
+			end
+			islandTapStart = nil
+		end
+	end)
+
+
     -- The mobile menu animates in and out of this bar like a droplet, so the
     -- island publishes its own centre (in Scale, read from the live
     -- AbsolutePosition so HUD scale and screen size are already accounted for)
@@ -13970,12 +13987,7 @@ if MOBILE and Pages.Buttons then
     -- The menu button drives the window itself rather than a game feature, and
     -- it is the one button that cannot be removed: deleting it on a device with
     -- no keyboard would leave no way to reopen the menu at all.
-    S._floatRegisterEntry({
-        cfgId = "ui:menu",
-        label = "Menu",
-        isToggle = true,
-        trigger = function() S._SetMenuVisible(not Main.Visible) end,
-    })
+    -- Menu float button removed per user request
 
     local secFloat = mkSection(Pages.Buttons, "Floating Buttons", 1)
 

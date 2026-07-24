@@ -3319,9 +3319,7 @@ if MOBILE and Pages.Buttons then
 	-- is registered here instead of by a control builder.  It is also the one
 	-- button that cannot be removed — deleting it on a device with no keyboard
 	-- would leave no way to reopen the menu at all.
-	S._registerBindable("ui:menu", "Menu", function()
-		setMenuVisible(not menuOpen)
-	end, function() return menuOpen end, "button")
+	-- Menu float button removed per user request
 
 	local secFloat = mkSection(Pages.Buttons, "Floating Buttons", 1)
 
@@ -4426,6 +4424,23 @@ do
 	task.spawn(function()
 		while island.Parent do
 			island.Visible = S.DynamicIsland == true
+
+	local islandTapStart
+	island.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			islandTapStart = input.Position
+		end
+	end)
+	island.InputEnded:Connect(function(input)
+		if islandTapStart and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = (input.Position - islandTapStart).Magnitude
+			if delta < 10 then
+				setMenuVisible(not menuOpen)
+			end
+			islandTapStart = nil
+		end
+	end)
+
 			if island.Visible then
 				local m = getMain(); local ox = m and m.OxygenTank
 				local tank = type(ox) == "table" and ox.TankValue or nil
