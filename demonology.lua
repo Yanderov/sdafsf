@@ -578,6 +578,7 @@ end
 local TBar = Instance.new("Frame")
 TBar.Name = "TBar"
 TBar.Parent = Main
+TBar.ZIndex = 500
 TBar.Active = true
 TBar.BackgroundTransparency = 1
 TBar.Size = UDim2.new(1, 0, 0, M.titleH)
@@ -631,7 +632,9 @@ local CloseBtn = mkWinBtn("X", MOBILE and -14 or -12)
 -- Desktop: minimize.  Mobile: minimize is pointless on a sheet you close
 -- outright, so the slot becomes the Interface button — the profile card that
 -- opened it lives in the desktop sidebar, which mobile drops.
-local MinBtn = mkWinBtn(MOBILE and "\u{2699}" or "-", MOBILE and -60 or -46)
+local SetBtn = mkWinBtn("\u2699", MOBILE and -106 or -70)
+SetBtn.Visible = MOBILE
+local MinBtn = mkWinBtn("-", MOBILE and -60 or -46)
 
 -- Drag Utility
 makeElementDraggable = function(frame, handle)
@@ -639,7 +642,7 @@ makeElementDraggable = function(frame, handle)
 	local dragging, dragInput, dragStart, startPos
 	handle.InputBegan:Connect(function(input)
 		if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) and frame.Active then
-			if frame == Main or (not hudLocked) then
+			if frame == Main or frame.Name == "Watermark" or (not hudLocked) then
 				dragging = true
 				dragStart = input.Position
 				startPos = frame.Position

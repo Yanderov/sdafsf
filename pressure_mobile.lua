@@ -780,7 +780,7 @@ NHost.Size = UDim2.new(0, 330, 0, 190)
 NHost.ZIndex = 900
 local nLayout = Instance.new("UIListLayout")
 nLayout.Parent = NHost
-nLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+nLayout.HorizontalAlignment = MOBILE and Enum.HorizontalAlignment.Center or Enum.HorizontalAlignment.Right
 nLayout.SortOrder = Enum.SortOrder.LayoutOrder
 nLayout.Padding = UDim.new(0, 6)
 
@@ -1075,6 +1075,7 @@ end
 local TBar = Instance.new("Frame")
 TBar.Name = "TBar"
 TBar.Parent = Main
+TBar.ZIndex = 500
 TBar.ZIndex = 500
 TBar.BackgroundTransparency = 1
 TBar.Size = UDim2.new(1, 0, 0, M.titleH - 1)

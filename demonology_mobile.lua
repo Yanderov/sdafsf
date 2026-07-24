@@ -583,6 +583,7 @@ local TBar = Instance.new("Frame")
 TBar.Name = "TBar"
 TBar.Parent = Main
 TBar.ZIndex = 500
+TBar.ZIndex = 500
 TBar.Active = true
 TBar.BackgroundTransparency = 1
 TBar.Size = UDim2.new(1, 0, 0, M.titleH)
