@@ -659,7 +659,7 @@ local function Stroke(i, col, th, tr)
     s.Color = col or T.Bd
     s.Thickness = th or 1
     s.Transparency = tr or 0
-    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     s.LineJoinMode = Enum.LineJoinMode.Round
     s.Parent = i
     return s
@@ -685,7 +685,7 @@ local function Shadow(i, transparency)
     s.Color = T.Bd2; pcall(function() s:SetAttribute("ThemeColorRole_Color", "Bd2") end)
     s.Thickness = 2
     s.Transparency = transparency or 0.6
-    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     s.LineJoinMode = Enum.LineJoinMode.Round
     s.Parent = i
     return s
@@ -828,16 +828,16 @@ end))
 local NHost = Instance.new("Frame")
 NHost.Name = "Notifs"
 NHost.Parent = SG
-NHost.AnchorPoint = MOBILE and Vector2.new(0.5, 0) or Vector2.new(1, 1)
+NHost.AnchorPoint = Vector2.new(1, 1)
 NHost.BackgroundTransparency = 1
 NHost.BorderSizePixel = 0
-NHost.Position = MOBILE and UDim2.new(0.5, 0, 0, 80) or UDim2.new(1, -20, 1, -82)
-NHost.Size = MOBILE and UDim2.new(1, -24, 0, 360) or UDim2.new(0, 392, 0, 360)
+NHost.Position = UDim2.new(1, -20, 1, -82)
+NHost.Size = UDim2.new(0, 392, 0, 360)
 NHost.ZIndex = 900
 local nLayout = Instance.new("UIListLayout")
 nLayout.Parent = NHost
-nLayout.HorizontalAlignment = MOBILE and Enum.HorizontalAlignment.Center or Enum.HorizontalAlignment.Right
-nLayout.VerticalAlignment = MOBILE and Enum.VerticalAlignment.Top or Enum.VerticalAlignment.Bottom
+nLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+nLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
 nLayout.SortOrder = Enum.SortOrder.LayoutOrder
 nLayout.Padding = UDim.new(0, 6)
 local NOrder, ActiveN = 0, {}
@@ -1221,8 +1221,8 @@ local M = MOBILE and {
 local viewport = (workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize) or Vector2.new(1280, 720)
 -- Mobile is Scale-driven (see the responsive block further down); the desktop
 -- numbers stay clamped to the monitor as before.
-local WW = MOBILE and math.min(math.floor(viewport.X * 0.96), 640) or math.max(560, math.min(980, math.floor(viewport.X - 36)))
-local WH = MOBILE and math.min(math.floor(viewport.Y * 0.9), 320) or math.max(430, math.min(640, math.floor(viewport.Y - 56)))
+local WW = MOBILE and math.floor(viewport.X * 0.92) or math.max(560, math.min(980, math.floor(viewport.X - 36)))
+local WH = MOBILE and math.floor(viewport.Y * 0.84) or math.max(430, math.min(640, math.floor(viewport.Y - 56)))
 local expandedSize = UDim2.fromOffset(WW, WH)
 Main = Instance.new("Frame")
 Main.Name = "Main"
@@ -1264,7 +1264,7 @@ local function setMenuVisible(v)
         S._menuHome = Main.Position
         local target = (S._islandPoint and S._islandPoint()) or UDim2.new(0.5, 0, 0, 34)
         TweenService.Create(TweenService, Main, TweenInfo.new(0.26, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = target }):Play()
-        -- (Removed scale tween to fix lag)
+        TweenService.Create(TweenService, menuScale, TweenInfo.new(0.26, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Scale = 0.05 }):Play()
         task.delay(0.27, function()
             -- Reopened mid-animation? The open path already re-tweened it; hiding
             -- now would swallow the window the user just asked for.
@@ -1308,8 +1308,6 @@ accGrad.Transparency = NumberSequence.new({
 local TBar = Instance.new("Frame")
 TBar.Name = "TBar"
 TBar.Parent = Main
-TBar.ZIndex = 500
-TBar.ZIndex = 500
 TBar.BackgroundTransparency = 1
 TBar.Size = UDim2.new(1, 0, 0, M.titleH - 1)
 TBar.Position = UDim2.new(0, 0, 0, 1)
@@ -1357,9 +1355,7 @@ local function mkWinBtn(txt, xOff)
     return b
 end
 local CloseBtn = mkWinBtn("×", MOBILE and -14 or -10)
-local SetBtn = mkWinBtn("\u{2699}", MOBILE and -106 or -70)
-SetBtn.Visible = MOBILE
-local MinBtn = mkWinBtn("-", MOBILE and -60 or -40)
+local MinBtn = mkWinBtn("—", MOBILE and -60 or -40)
 -- ===== Feature search =====
 local UIRegistry = {}
 -- ===== Config system: each toggle/slider/cycle registers a get/set here =====
@@ -1543,8 +1539,8 @@ end)
 do
     -- Touch counts as a drag: matching only MouseButton1/MouseMovement (as this
     -- did) makes the window impossible to move on a phone.
-    local dr, ds, sp;
-    (MOBILE and Main or TBar).InputBegan:Connect(function(i)
+    local dr, ds, sp
+    TBar.InputBegan:Connect(function(i)
         if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
             -- The search box and the header buttons bubble input through TBar;
             -- without this hit test, tapping them starts a window drag.
@@ -3177,38 +3173,40 @@ mkSlider = function(parent, label, min, max, def, callback, order, skipSearchReg
         vlbl.Text = tostring(v)
     end
     upd(val)
-    	local activeInput = nil
-	local function fromMouse(input)
-		local bp = bar.AbsolutePosition
-		local bs = bar.AbsoluteSize
-		local pct = math.clamp((input.Position.X - bp.X) / bs.X, 0, 1)
-		local nv = math.floor(min + (max - min) * pct + 0.5)
-		if nv ~= val then
-			val = nv
-			upd(val)
-			callback(val)
-			if S._RequestAutoSave then S._RequestAutoSave() end
-		end
-	end
-	frame.InputBegan:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1
-			or i.UserInputType == Enum.UserInputType.Touch then
-			activeInput = i
-			ContentArea.ScrollingEnabled = false
-			fromMouse(i)
-		end
-	end)
-	tc(UIS.InputChanged:Connect(function(i)
-		if activeInput == i then
-			fromMouse(i)
-		end
-	end))
-	tc(UIS.InputEnded:Connect(function(i)
-		if activeInput == i then
-			ContentArea.ScrollingEnabled = true
-			activeInput = nil
-		end
-	end))
+    local active = false
+    local function fromMouse(input)
+        local bp = bar.AbsolutePosition
+        local bs = bar.AbsoluteSize
+        local pct = math.clamp((input.Position.X - bp.X) / bs.X, 0, 1)
+        local nv = math.floor(min + (max - min) * pct + 0.5)
+        if nv ~= val then
+            val = nv
+            upd(val)
+            callback(val)
+        end
+    end
+    -- Touch counts as a drag here. Matching only MouseButton1/MouseMovement (as
+    -- this did) leaves every slider dead on a phone. Freezing the page scroll
+    -- for the drag is the other half: a touch drag inside a ScrollingFrame
+    -- scrolls the page as well as moving the slider.
+    frame.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            active = true
+            if MOBILE then ContentArea.ScrollingEnabled = false end
+            fromMouse(i)
+        end
+    end)
+    tc(UIS.InputChanged:Connect(function(i)
+        if active and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+            fromMouse(i)
+        end
+    end))
+    tc(UIS.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            if active and MOBILE then ContentArea.ScrollingEnabled = true end
+            active = false
+        end
+    end))
     if not skipSearchRegistry then
         table.insert(UIRegistry, { label = string.lower(label), row = frame, card = parent.Parent })
     end
@@ -6509,10 +6507,9 @@ local function attachHUDDrag(frame, handle)
     local stroke = frame:FindFirstChildOfClass("UIStroke")
     local restStrokeTransparency = stroke and stroke.Transparency or 0.24
     local function dragVisual(active)
-        -- Drag scale removed to prevent lag
-        -- TweenService:Create(scale, TweenInfo.new(active and 0.14 or 0.2, active and Enum.EasingStyle.Quad or Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        --             Scale = active and 1.018 or 1
-        --         }):Play()
+        TweenService:Create(scale, TweenInfo.new(active and 0.14 or 0.2, active and Enum.EasingStyle.Quad or Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Scale = active and 1.018 or 1
+        }):Play()
         if stroke then
             TweenService:Create(stroke, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
                 Color = active and T.Accent or T.Bd2,
@@ -6533,15 +6530,9 @@ local function attachHUDDrag(frame, handle)
             dragVisual(true)
         end
     end)
-    local currentDragInput = nil
-    dragHandle.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            currentDragInput = input
-        end
-    end)
-    tc(game:GetService("RunService").RenderStepped:Connect(function()
-        if dragging and currentDragInput and dragStart and startPos then
-            local delta = currentDragInput.Position - dragStart
+    tc(UIS.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement and dragStart and startPos then
+            local delta = input.Position - dragStart
             frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
     end))
@@ -6738,7 +6729,7 @@ local function mkStatHUD(name, pos, w, z)
     lbl.TextYAlignment = Enum.TextYAlignment.Center
     lbl.Text = "\u{2014}"
     lbl.ZIndex = z + 1
-    task.defer(function() attachHUDDrag(f) end)
+    attachHUDDrag(f)
     HUDEls[name] = { frame = f, content = f }
     return HUDEls[name], lbl
 end
@@ -6959,25 +6950,8 @@ local function mkWatermark()
     HUD.islandPing = metric(201, 48, "PING")
     HUD.islandFPS = metric(254, 44, "FPS")
     HUD.islandSession = metric(303, 60, "TIME")
-    task.defer(function() attachHUDDrag(f) end)
+    attachHUDDrag(f)
     HUDEls["Watermark"] = { frame = f, content = f }
-
-	local islandTapStart
-	f.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			islandTapStart = input.Position
-		end
-	end)
-	f.InputEnded:Connect(function(input)
-		if islandTapStart and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
-			local delta = (input.Position - islandTapStart).Magnitude
-			if delta < 10 then
-				S._SetMenuVisible(not Main.Visible)
-			end
-			islandTapStart = nil
-		end
-	end)
-
 
     -- The mobile menu animates in and out of this bar like a droplet, so the
     -- island publishes its own centre (in Scale, read from the live
@@ -9590,13 +9564,8 @@ do
         if MOBILE then
             -- Portrait: a tall sheet with breathing room. Landscape: narrower and
             -- near-full height, since a full-width sheet there is mostly padding.
-            if portrait then
-                WW = math.floor(vp.X * 0.95)
-                WH = math.min(600, math.floor(vp.Y * 0.85))
-            else
-                WW = math.min(640, math.floor(vp.X * 0.94))
-                WH = math.min(320, math.floor(vp.Y * 0.80))
-            end
+            WW = math.floor(math.clamp(vp.X * (portrait and 0.94 or 0.64), 260, 620))
+            WH = math.floor(math.clamp(vp.Y * (portrait and 0.82 or 0.92), 300, 940))
         else
             WW = math.max(560, math.min(980, math.floor(vp.X - 36)))
             WH = math.max(430, math.min(640, math.floor(vp.Y - 56)))
@@ -9622,6 +9591,13 @@ do
     end))
 end
 CloseBtn.MouseButton1Click:Connect(function()
+    -- Mobile: X only hides the sheet (the floating MENU button brings it back).
+    -- Destroying the whole hub here would also destroy that button, leaving a
+    -- touch user with no way to reopen anything short of re-injecting.
+    if MOBILE then
+        S._SetMenuVisible(false)
+        return
+    end
     TweenService.Create(TweenService, Main, TweenInfo.new(0.2), { Size = UDim2.fromOffset(0, 0) }):Play()
     task.wait(0.22)
     S:Destroy()
@@ -14001,7 +13977,12 @@ if MOBILE and Pages.Buttons then
     -- The menu button drives the window itself rather than a game feature, and
     -- it is the one button that cannot be removed: deleting it on a device with
     -- no keyboard would leave no way to reopen the menu at all.
-    -- Menu float button removed per user request
+    S._floatRegisterEntry({
+        cfgId = "ui:menu",
+        label = "Menu",
+        isToggle = true,
+        trigger = function() S._SetMenuVisible(not Main.Visible) end,
+    })
 
     local secFloat = mkSection(Pages.Buttons, "Floating Buttons", 1)
 

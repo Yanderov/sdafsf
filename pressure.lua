@@ -622,7 +622,7 @@ local function Corner(i, r) local c = Instance.new("UICorner"); c.CornerRadius =
 local function Stroke(i, col, th, tr)
 	local s = Instance.new("UIStroke")
 	s.Color = col or T.Bd; s.Thickness = th or 1; s.Transparency = tr or 0
-	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual; s.Parent = i
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; s.Parent = i
 	return s
 end
 local function Grad(i, c1, c2, rot)
@@ -639,7 +639,7 @@ end
 local function Shadow(i, tr)
 	local s = Instance.new("UIStroke")
 	s.Color = T.Bd2; s.Thickness = 2; s.Transparency = tr or 0.6
-	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual; s.Parent = i
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; s.Parent = i
 	return s
 end
 local function Tween(inst, time, props, style, dir)
@@ -776,7 +776,7 @@ NHost.Size = UDim2.new(0, 330, 0, 190)
 NHost.ZIndex = 900
 local nLayout = Instance.new("UIListLayout")
 nLayout.Parent = NHost
-nLayout.HorizontalAlignment = MOBILE and Enum.HorizontalAlignment.Center or Enum.HorizontalAlignment.Right
+nLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
 nLayout.SortOrder = Enum.SortOrder.LayoutOrder
 nLayout.Padding = UDim.new(0, 6)
 
@@ -932,7 +932,7 @@ local function Notify(title, msg, dur, tone)
 	bar.ZIndex = 902
 	Corner(bar, 2)
 
-	local sc = Instance.new("UIScale"); sc.Scale = MOBILE and 0.75 or 0.9; sc.Parent = toast
+	local sc = Instance.new("UIScale"); sc.Scale = 0.9; sc.Parent = toast
 
 	local tt = Instance.new("TextLabel")
 	tt.Parent = toast; tt.BackgroundTransparency = 1; tt.Font = FB
@@ -1071,7 +1071,6 @@ end
 local TBar = Instance.new("Frame")
 TBar.Name = "TBar"
 TBar.Parent = Main
-TBar.ZIndex = 500
 TBar.BackgroundTransparency = 1
 TBar.Size = UDim2.new(1, 0, 0, M.titleH - 1)
 TBar.Position = UDim2.new(0, 0, 0, 1)
@@ -1506,33 +1505,19 @@ btnMin.MouseButton1Click:Connect(function()
 end)
 
 local function mkPage(name)
-    local sf = Instance.new("Frame")
-    sf.Name = name
-    sf.Parent = ContentArea
-    sf.BackgroundTransparency = 1
-    sf.BorderSizePixel = 0
-    sf.Position = UDim2.new(0, 0, 0, 0)
-    sf.Size = UDim2.new(1, 0, 1, 0)
-    sf.AutomaticSize = Enum.AutomaticSize.None
-    sf.Visible = false
-    local hdr = Instance.new("TextLabel")
-    hdr.Name = "SearchHdr"
-    hdr.Parent = sf
-    hdr.LayoutOrder = -1
-    hdr.BackgroundColor3 = T.Elev; pcall(function() hdr:SetAttribute("ThemeColorRole_BackgroundColor3", "Elev") end)
-    hdr.BackgroundTransparency = 0.25
-    hdr.BorderSizePixel = 0
-    hdr.Size = UDim2.new(1, 0, 0, 24)
-    hdr.Font = FB
-    hdr.TextSize = 12
-    hdr.TextColor3 = T.Tx2; pcall(function() hdr:SetAttribute("ThemeColorRole_TextColor3", "Tx2") end)
-    hdr.TextXAlignment = Enum.TextXAlignment.Left
-    hdr.Text = string.upper(name)
-    hdr.Visible = false
-    Corner(hdr, 6)
-    Pad(hdr, 0, 0, 10, 10)
-    Pages[name] = sf
-    return sf
+	local sf = Instance.new("Frame")
+	sf.Name = name
+	sf.Parent = ContentArea
+	sf.BackgroundTransparency = 1
+	sf.BorderSizePixel = 0
+	sf.Size = UDim2.new(1, 0, 0, 0)
+	sf.AutomaticSize = Enum.AutomaticSize.Y
+	sf.Visible = false
+	local l = Instance.new("UIListLayout")
+	l.Parent = sf; l.SortOrder = Enum.SortOrder.LayoutOrder; l.Padding = UDim.new(0, MOBILE and 14 or 12)
+	Pad(sf, MOBILE and 6 or 8, MOBILE and 18 or 12, MOBILE and 6 or 6, MOBILE and 6 or 8)
+	Pages[name] = sf
+	return sf
 end
 
 local TAB_DEFS = {
