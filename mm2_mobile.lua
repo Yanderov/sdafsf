@@ -1356,7 +1356,9 @@ local function mkWinBtn(txt, xOff)
     return b
 end
 local CloseBtn = mkWinBtn("×", MOBILE and -14 or -10)
-local MinBtn = mkWinBtn("—", MOBILE and -60 or -40)
+local SetBtn = mkWinBtn("\u{2699}", MOBILE and -106 or -70)
+SetBtn.Visible = MOBILE
+local MinBtn = mkWinBtn("-", MOBILE and -60 or -40)
 -- ===== Feature search =====
 local UIRegistry = {}
 -- ===== Config system: each toggle/slider/cycle registers a get/set here =====
