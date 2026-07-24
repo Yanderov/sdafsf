@@ -336,7 +336,9 @@ NHost.Parent = SG
 NHost.AnchorPoint = Vector2.new(0.5, 0)
 NHost.BackgroundTransparency = 1
 NHost.BorderSizePixel = 0
-NHost.Position = UDim2.new(0.5, 0, 0.04, 0)
+-- Mobile pushes the toast column below the Dynamic Island (top-center, on by
+-- default there) — at 0.04 the two stacked on top of each other.
+NHost.Position = MOBILE and UDim2.new(0.5, 0, 0, 72) or UDim2.new(0.5, 0, 0.04, 0)
 NHost.Size = UDim2.new(0, 360, 0, 240)
 NHost.ZIndex = 900
 local nLayout = Instance.new("UIListLayout")
@@ -420,7 +422,9 @@ function UIStyle:ApplyHUDScale(scale)
 				scaler.Name = "HUDUserScale"
 				scaler.Parent = object
 			end
-			scaler.Scale = S.HUDScale
+			-- MobileFit shrinks fixed-pixel HUDs (the Dynamic Island foremost)
+			-- to a narrow phone screen; 1 everywhere else.
+			scaler.Scale = S.HUDScale * (tonumber(object:GetAttribute("MobileFit")) or 1)
 		end
 	end
 	if S._refreshAppearance then pcall(S._refreshAppearance) end
@@ -4379,10 +4383,13 @@ do
 	kbLbl.TextWrapped = true
 	kbLbl.LineHeight = 1.3
 	kbLbl.Text = "Insert — show / hide menu"
-	mkToggle(panels, "Keybinds HUD", false, function(v)
-		keybindsHud.frame.Visible = v
-		NotifyToggle("Keybinds HUD", v)
-	end, 2)
+	-- Keybinds don't exist on the touch build, so neither does their HUD toggle.
+	if not MOBILE then
+		mkToggle(panels, "Keybinds HUD", false, function(v)
+			keybindsHud.frame.Visible = v
+			NotifyToggle("Keybinds HUD", v)
+		end, 2)
+	end
 
 	local fpsHud = mkDragHUD("Performance", UDim2.new(1, -178, 0, 72), UDim2.fromOffset(160, 70), 852)
 	local fpsLbl = Instance.new("TextLabel")
@@ -4649,11 +4656,23 @@ do
 		local centre = island.AbsolutePosition + island.AbsoluteSize / 2
 		return UDim2.fromScale(math.clamp(centre.X / vp.X, 0, 1), math.clamp(centre.Y / vp.Y, 0, 1))
 	end
+	-- Keep the island inside a narrow (portrait) phone screen.
+	if MOBILE then
+		local function fitIsland()
+			local camera = workspace.CurrentCamera
+			local vp = camera and camera.ViewportSize
+			if not vp or vp.X < 1 then return end
+			island:SetAttribute("MobileFit", math.clamp((vp.X - 32) / 420, 0.6, 1))
+			islandScale.Scale = S.HUDScale * (tonumber(island:GetAttribute("MobileFit")) or 1)
+		end
+		fitIsland()
+		tc(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(fitIsland))
+	end
 	S._islandGulp = function(outward)
 		if not island.Visible then return end
 		-- Read the target from S.HUDScale, not from the live UIScale: a gulp that
 		-- lands mid-tween would otherwise bake in a transient value.
-		local base = S.HUDScale
+		local base = S.HUDScale * (tonumber(island:GetAttribute("MobileFit")) or 1)
 		TweenService:Create(islandScale, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
 			Scale = base * (outward and 1.1 or 0.9),
 		}):Play()

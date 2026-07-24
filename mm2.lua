@@ -891,7 +891,14 @@ local function Notify(title, msg, dur, style)
     local fromTop = notificationPosition:sub(1, 3) == "Top"
     local slideX = fromLeft and -18 or (fromRight and 18 or 0)
     local slideY = (not fromLeft and not fromRight) and (fromTop and -12 or 12) or 0
+    -- A fixed 352px toast hangs off the edge of a narrow phone screen; follow
+    -- the viewport there instead.
     local toastWidth = 352
+    if MOBILE then
+        local camera = workspace.CurrentCamera
+        local vp = camera and camera.ViewportSize
+        if vp then toastWidth = math.clamp(math.floor(vp.X * 0.42), 240, 352) end
+    end
     local bodyTextSize = math.clamp(math.round(13 * (S.TextSizeScale or 1)), 11, 18)
     local bodyHeight = roleReveal and 52 or 19
     if not roleReveal then
@@ -6962,6 +6969,22 @@ local function mkWatermark()
         local centre = f.AbsolutePosition + f.AbsoluteSize / 2
         return UDim2.fromScale(math.clamp(centre.X / vp.X, 0, 1), math.clamp(centre.Y / vp.Y, 0, 1))
     end
+    -- Keep the island inside a narrow (portrait) phone screen: MobileFit is
+    -- read by _SetHUDVisible and the gulp below every time they animate it.
+    if MOBILE then
+        local function fitIsland()
+            local camera = workspace.CurrentCamera
+            local vp = camera and camera.ViewportSize
+            if not vp or vp.X < 1 then return end
+            local fit = math.clamp((vp.X - 32) / 420, 0.6, 1)
+            f:SetAttribute("MobileFit", fit)
+            local scaler = f:FindFirstChild("HUDScale")
+            if scaler and f.Visible then scaler.Scale = fit end
+        end
+        fitIsland()
+        tc(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(fitIsland))
+    end
+
     S._islandGulp = function(outward)
         if not f.Visible then return end
         -- Reuse the HUD's own show/hide UIScale ("HUDScale", created by
@@ -6969,7 +6992,7 @@ local function mkWatermark()
         -- honours one UIScale, so a private one here would be ignored.
         local scaler = f:FindFirstChild("HUDScale")
         if not scaler then return end
-        local base = 1
+        local base = tonumber(f:GetAttribute("MobileFit")) or 1
         TweenService.Create(TweenService, scaler, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
             Scale = base * (outward and 1.1 or 0.9),
         }):Play()
@@ -7133,11 +7156,14 @@ S._SetHUDVisible = function(el, visible)
     end
     local restTransparency = frame:GetAttribute("HUDRestTransparency")
     if type(restTransparency) ~= "number" then restTransparency = frame.BackgroundTransparency end
+    -- MobileFit shrinks a fixed-pixel HUD (the 382px island foremost) to the
+    -- phone's width; 1 everywhere else, so desktop behaviour is untouched.
+    local fit = tonumber(frame:GetAttribute("MobileFit")) or 1
     if visible then
         frame.Visible = true
-        scale.Scale = 0.94
+        scale.Scale = 0.94 * fit
         frame.BackgroundTransparency = math.min(1, restTransparency + 0.16)
-        TweenService:Create(scale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+        TweenService:Create(scale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = fit }):Play()
         TweenService:Create(frame, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             BackgroundTransparency = restTransparency
         }):Play()
@@ -7147,7 +7173,7 @@ S._SetHUDVisible = function(el, visible)
             TweenService:Create(stroke, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Transparency = 0.24 }):Play()
         end
     else
-        TweenService:Create(scale, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Scale = 0.97 }):Play()
+        TweenService:Create(scale, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Scale = 0.97 * fit }):Play()
         TweenService:Create(frame, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
             BackgroundTransparency = math.min(1, restTransparency + 0.18)
         }):Play()

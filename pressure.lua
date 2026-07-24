@@ -868,7 +868,9 @@ function UIStyle:ApplyHUDScale(scale)
 						scaler.Name = "HUDUserScale"
 						scaler.Parent = object
 					end
-					scaler.Scale = S.HUDScale
+					-- MobileFit shrinks fixed-pixel HUDs (the Dynamic Island
+					-- foremost) to a narrow phone screen; 1 everywhere else.
+					scaler.Scale = S.HUDScale * (tonumber(object:GetAttribute("MobileFit")) or 1)
 				end
 			end
 		end
@@ -4394,11 +4396,23 @@ do
 		local centre = island.AbsolutePosition + island.AbsoluteSize / 2
 		return UDim2.fromScale(math.clamp(centre.X / vp.X, 0, 1), math.clamp(centre.Y / vp.Y, 0, 1))
 	end
+	-- Keep the island inside a narrow (portrait) phone screen.
+	if MOBILE then
+		local function fitIsland()
+			local vp = cam() and cam().ViewportSize
+			if not vp or vp.X < 1 then return end
+			island:SetAttribute("MobileFit", math.clamp((vp.X - 32) / 420, 0.6, 1))
+			islandScale.Scale = S.HUDScale * (tonumber(island:GetAttribute("MobileFit")) or 1)
+		end
+		fitIsland()
+		tc(cam():GetPropertyChangedSignal("ViewportSize"):Connect(fitIsland))
+	end
+
 	S._islandGulp = function(outward)
 		if not island.Visible then return end
 		-- Read the target from S.HUDScale, not from the live UIScale: a gulp that
 		-- lands mid-tween would otherwise bake in a transient value.
-		local base = S.HUDScale
+		local base = S.HUDScale * (tonumber(island:GetAttribute("MobileFit")) or 1)
 		-- Swallowing squashes inward first, spitting out bulges outward first.
 		Tween(islandScale, 0.12, { Scale = base * (outward and 1.1 or 0.9) }, Enum.EasingStyle.Quad):Play()
 		task.delay(0.12, function()

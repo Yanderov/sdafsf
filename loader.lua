@@ -33,18 +33,24 @@ if not parentGui then parentGui = LocalPlayer:WaitForChild("PlayerGui") end
 destroyOld(parentGui)
 
 local T = {
-	BG = Color3.fromRGB(9, 9, 10),
-	Card = Color3.fromRGB(17, 17, 19),
-	Elev = Color3.fromRGB(25, 25, 28),
-	Hover = Color3.fromRGB(34, 34, 38),
-	Border = Color3.fromRGB(44, 44, 49),
+	BG = Color3.fromRGB(6, 6, 7),
+	Card = Color3.fromRGB(13, 13, 15),
+	Elev = Color3.fromRGB(21, 21, 24),
+	Hover = Color3.fromRGB(30, 30, 34),
+	Border = Color3.fromRGB(42, 42, 47),
 	White = Color3.fromRGB(255, 255, 255),
-	Text = Color3.fromRGB(236, 236, 238),
-	Dim = Color3.fromRGB(126, 126, 133),
-	Faint = Color3.fromRGB(86, 86, 92),
+	Text = Color3.fromRGB(238, 238, 240),
+	Dim = Color3.fromRGB(128, 128, 136),
+	Faint = Color3.fromRGB(84, 84, 92),
 	Good = Color3.fromRGB(126, 214, 156),
 	Bad = Color3.fromRGB(228, 100, 100),
 }
+
+-- rbxthumb only serves GameIcon at 50x50 and 150x150 — any other size (the
+-- 420 this used before) is silently rejected and every icon renders blank.
+local function gameIcon(id)
+	return "rbxthumb://type=GameIcon&id=" .. tostring(id) .. "&w=150&h=150"
+end
 
 local function corner(object, radius)
 	local value = Instance.new("UICorner")
@@ -74,6 +80,13 @@ local function text(parent, value, size, color, font)
 end
 local function tween(object, time, props, style, dir)
 	return TweenService:Create(object, TweenInfo.new(time, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out), props)
+end
+local function grad(object, topColor, bottomColor, rotation)
+	local value = Instance.new("UIGradient")
+	value.Color = ColorSequence.new(topColor, bottomColor)
+	value.Rotation = rotation or 90
+	value.Parent = object
+	return value
 end
 
 -- Touch-only devices start on the mobile build; the switch below always wins.
@@ -107,6 +120,7 @@ Main.Active = true
 Main.ClipsDescendants = true
 corner(Main, 16)
 stroke(Main, 0.3)
+grad(Main, Color3.fromRGB(11, 11, 13), Color3.fromRGB(4, 4, 5))
 
 local Scale = Instance.new("UIScale")
 Scale.Scale = 0.92
@@ -249,16 +263,19 @@ for index, entry in ipairs(Games) do
 	card.Text = ""
 	corner(card, 14)
 	local cardStroke = stroke(card, 0.5)
+	grad(card, Color3.fromRGB(18, 18, 21), Color3.fromRGB(11, 11, 13))
+	local cardScale = Instance.new("UIScale")
+	cardScale.Parent = card
 
 	local icon = Instance.new("ImageLabel")
 	icon.Name = "Icon"
 	icon.Parent = card
 	icon.BackgroundColor3 = T.Elev
 	icon.BorderSizePixel = 0
-	icon.Image = "rbxthumb://type=GameIcon&id=" .. tostring(entry.icon) .. "&w=420&h=420"
+	icon.Image = gameIcon(entry.icon)
 	icon.ScaleType = Enum.ScaleType.Crop
 	corner(icon, 12)
-	stroke(icon, 0.6)
+	stroke(icon, 0.55)
 
 	local name = text(card, entry.name, 14, T.Text, Enum.Font.GothamMedium)
 	name.Name = "Title"
@@ -282,7 +299,8 @@ for index, entry in ipairs(Games) do
 
 	local function hover(on)
 		tween(card, 0.14, { BackgroundColor3 = on and T.Elev or T.Card }):Play()
-		tween(cardStroke, 0.14, { Transparency = on and 0.25 or 0.5 }):Play()
+		tween(cardStroke, 0.14, { Transparency = on and 0.2 or 0.5, Color = on and T.White or T.Border }):Play()
+		tween(cardScale, 0.16, { Scale = on and 1.015 or 1 }):Play()
 		tween(play, 0.14, { BackgroundColor3 = on and T.White or T.Elev }):Play()
 		play.TextColor3 = on and T.BG or T.Text
 		tween(playStroke, 0.14, { Transparency = on and 1 or 0.5 }):Play()
@@ -366,7 +384,7 @@ end
 
 setLoading = function(entry, status, failed)
 	Overlay.Visible = true
-	OverlayIcon.Image = "rbxthumb://type=GameIcon&id=" .. tostring(entry.icon) .. "&w=420&h=420"
+	OverlayIcon.Image = gameIcon(entry.icon)
 	OverlayName.Text = entry.name
 	OverlayStatus.Text = status
 	OverlayStatus.TextColor3 = failed and T.Bad or T.Dim
@@ -393,18 +411,21 @@ local function fit()
 	local vp = camera and camera.ViewportSize or Vector2.new(1280, 720)
 	local portrait = vp.Y >= vp.X
 
+	local pad = MOBILE and 16 or 18
+	local headerH = MOBILE and 58 or 54
+
 	local width, height
 	if MOBILE then
 		width = math.clamp(vp.X * (portrait and 0.92 or 0.6), 260, 460)
-		height = math.clamp(vp.Y * (portrait and 0.62 or 0.88), 280, 560)
+		-- Height comes from the CONTENT, not the screen: three game rows do not
+		-- justify a two-thirds-of-the-display sheet with a void underneath.
+		local contentH = headerH + #Games * 84 + (#Games - 1) * 10 + pad + 6
+		height = math.min(contentH, math.floor(vp.Y * 0.9))
 	else
 		width = math.clamp(vp.X - 80, 380, 620)
 		height = math.clamp(vp.Y - 80, 260, 380)
 	end
 	Main.Size = UDim2.fromOffset(math.floor(width), math.floor(height))
-
-	local pad = MOBILE and 16 or 18
-	local headerH = MOBILE and 58 or 54
 	Header.Position = UDim2.fromOffset(pad, 0)
 	Header.Size = UDim2.new(1, -pad * 2, 0, headerH)
 	Brand.Position = UDim2.fromOffset(0, MOBILE and 10 or 9)
