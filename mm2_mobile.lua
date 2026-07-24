@@ -1221,8 +1221,8 @@ local M = MOBILE and {
 local viewport = (workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize) or Vector2.new(1280, 720)
 -- Mobile is Scale-driven (see the responsive block further down); the desktop
 -- numbers stay clamped to the monitor as before.
-local WW = MOBILE and math.floor(viewport.X * 0.92) or math.max(560, math.min(980, math.floor(viewport.X - 36)))
-local WH = MOBILE and math.floor(viewport.Y * 0.84) or math.max(430, math.min(640, math.floor(viewport.Y - 56)))
+local WW = MOBILE and math.floor(viewport.X * 0.86) or math.max(560, math.min(980, math.floor(viewport.X - 36)))
+local WH = MOBILE and math.floor(viewport.Y * 0.78) or math.max(430, math.min(640, math.floor(viewport.Y - 56)))
 local expandedSize = UDim2.fromOffset(WW, WH)
 Main = Instance.new("Frame")
 Main.Name = "Main"
@@ -1264,7 +1264,7 @@ local function setMenuVisible(v)
         S._menuHome = Main.Position
         local target = (S._islandPoint and S._islandPoint()) or UDim2.new(0.5, 0, 0, 34)
         TweenService.Create(TweenService, Main, TweenInfo.new(0.26, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = target }):Play()
-        TweenService.Create(TweenService, menuScale, TweenInfo.new(0.26, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Scale = 0.05 }):Play()
+        -- (Removed scale tween to fix lag)
         task.delay(0.27, function()
             -- Reopened mid-animation? The open path already re-tweened it; hiding
             -- now would swallow the window the user just asked for.
@@ -1308,6 +1308,7 @@ accGrad.Transparency = NumberSequence.new({
 local TBar = Instance.new("Frame")
 TBar.Name = "TBar"
 TBar.Parent = Main
+TBar.ZIndex = 500
 TBar.BackgroundTransparency = 1
 TBar.Size = UDim2.new(1, 0, 0, M.titleH - 1)
 TBar.Position = UDim2.new(0, 0, 0, 1)

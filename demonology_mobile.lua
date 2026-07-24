@@ -582,6 +582,7 @@ end
 local TBar = Instance.new("Frame")
 TBar.Name = "TBar"
 TBar.Parent = Main
+TBar.ZIndex = 500
 TBar.Active = true
 TBar.BackgroundTransparency = 1
 TBar.Size = UDim2.new(1, 0, 0, M.titleH)
@@ -643,7 +644,7 @@ makeElementDraggable = function(frame, handle)
 	local dragging, dragInput, dragStart, startPos
 	handle.InputBegan:Connect(function(input)
 		if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) and frame.Active then
-			if frame == Main or (not hudLocked) then
+			if frame == Main or frame.Name == "Watermark" or (not hudLocked) then
 				dragging = true
 				dragStart = input.Position
 				startPos = frame.Position
