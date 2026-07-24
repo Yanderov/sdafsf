@@ -1544,7 +1544,7 @@ do
     -- Touch counts as a drag: matching only MouseButton1/MouseMovement (as this
     -- did) makes the window impossible to move on a phone.
     local dr, ds, sp
-    TBar.InputBegan:Connect(function(i)
+    (MOBILE and Main or TBar).InputBegan:Connect(function(i)
         if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
             -- The search box and the header buttons bubble input through TBar;
             -- without this hit test, tapping them starts a window drag.
@@ -9590,8 +9590,13 @@ do
         if MOBILE then
             -- Portrait: a tall sheet with breathing room. Landscape: narrower and
             -- near-full height, since a full-width sheet there is mostly padding.
-            WW = math.floor(math.clamp(vp.X * (portrait and 0.94 or 0.64), 260, 620))
-            WH = math.floor(math.clamp(vp.Y * (portrait and 0.82 or 0.92), 300, 940))
+            if portrait then
+                WW = math.floor(vp.X * 0.95)
+                WH = math.min(600, math.floor(vp.Y * 0.85))
+            else
+                WW = math.min(640, math.floor(vp.X * 0.94))
+                WH = math.min(320, math.floor(vp.Y * 0.80))
+            end
         else
             WW = math.max(560, math.min(980, math.floor(vp.X - 36)))
             WH = math.max(430, math.min(640, math.floor(vp.Y - 56)))
